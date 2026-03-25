@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>所得税・住民税 控除ガイド（令和7年改正対応）</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#ffffff; --bg2:#f5f4f0; --bg3:#eeece7;
+  --text:#1a1a18; --text2:#5f5e5a; --text3:#888780;
+  --border:rgba(0,0,0,0.12); --border2:rgba(0,0,0,0.20);
+  --info-bg:#e6f1fb; --info-text:#0c447c; --info-border:#378add;
+  --success-bg:#eaf3de; --success-text:#27500a; --success-border:#639922;
+  --warning-bg:#faeeda; --warning-text:#633806; --warning-border:#ba7517;
+  --danger-bg:#fcebeb; --danger-text:#791f1f; --danger-border:#e24b4a;
+  --purple-bg:#EEEDFE; --purple-text:#3C3489;
+  --amber-bg:#faeeda; --amber-text:#633806;
+  --radius:8px; --radius-lg:12px;
+}
+@media (prefers-color-scheme:dark) {
+  :root {
+    --bg:#1e1e1c; --bg2:#2a2a28; --bg3:#333330;
+    --text:#e8e6de; --text2:#a8a69e; --text3:#6e6c66;
+    --border:rgba(255,255,255,0.12); --border2:rgba(255,255,255,0.22);
+    --info-bg:#0c2d4a; --info-text:#85b7eb; --info-border:#185fa5;
+    --success-bg:#173404; --success-text:#97c459; --success-border:#3b6d11;
+    --warning-bg:#2a1c08; --warning-text:#ef9f27; --warning-border:#854f0b;
+    --danger-bg:#2e1010; --danger-text:#f09595; --danger-border:#a32d2d;
+    --purple-bg:#26215C; --purple-text:#CECBF6;
+    --amber-bg:#2a1c08; --amber-text:#ef9f27;
+  }
+}
+body { font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; font-size:14px; background:var(--bg3); color:var(--text); min-height:100vh; line-height:1.6; }
+.page-header { background:var(--bg); border-bottom:0.5px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.page-header h1 { font-size:15px; font-weight:500; }
+.rev-tag { font-size:11px; font-weight:500; background:var(--warning-bg); color:var(--warning-text); border-radius:var(--radius); padding:2px 8px; }
+.upd-tag { font-size:11px; color:var(--text3); margin-left:auto; }
+.layout { display:flex; min-height:calc(100vh - 45px); }
+.sidebar { width:300px; flex-shrink:0; background:var(--bg); border-right:0.5px solid var(--border); padding:16px 14px; overflow-y:auto; position:sticky; top:0; max-height:calc(100vh - 45px); }
+.main { flex:1; padding:16px 20px; min-width:0; }
+.sec { margin-bottom:16px; }
+.sec-label { font-size:11px; font-weight:500; color:var(--text2); letter-spacing:0.04em; margin-bottom:7px; display:flex; align-items:center; gap:6px; }
+.divider { border:none; border-top:0.5px solid var(--border); margin:14px 0; }
+.chips { display:flex; flex-wrap:wrap; gap:5px; }
+.chip { padding:5px 11px; border:0.5px solid var(--border2); border-radius:99px; font-size:12px; cursor:pointer; background:transparent; color:var(--text2); transition:all .12s; }
+.chip:hover { background:var(--bg2); }
+.chip.sel { background:var(--info-bg); color:var(--info-text); border-color:var(--info-border); font-weight:500; }
+.chip.dim { opacity:0.3; pointer-events:none; }
+.inc-block { border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg); margin-bottom:7px; }
+.inc-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.inc-row { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+.inc-row:last-child { margin-bottom:0; }
+.inc-row label { font-size:11px; color:var(--text2); min-width:86px; }
+.inc-row input[type=number] { width:90px; padding:4px 7px; border:0.5px solid var(--border2); border-radius:var(--radius); font-size:13px; background:var(--bg); color:var(--text); }
+.inc-row .unit { font-size:11px; color:var(--text2); }
+.inc-hint { font-size:10px; color:var(--text3); margin-top:3px; }
+.inc-result { font-size:11px; color:var(--text2); margin-top:6px; padding-top:6px; border-top:0.5px solid var(--border); }
+.inc-result span { font-weight:500; color:var(--text); }
+select { font-size:12px; border:0.5px solid var(--border2); border-radius:var(--radius); padding:4px 7px; background:var(--bg); color:var(--text); cursor:pointer; }
+.add-btn { width:100%; padding:6px 0; border:0.5px dashed var(--border2); border-radius:var(--radius); font-size:12px; cursor:pointer; background:transparent; color:var(--text2); text-align:center; transition:all .12s; margin-top:4px; }
+.add-btn:hover { background:var(--bg2); }
+.total-box { margin-top:8px; padding:8px 12px; background:var(--bg2); border-radius:var(--radius); font-size:11px; }
+.total-label { color:var(--text2); }
+.total-val { font-size:13px; font-weight:500; color:var(--text); margin-top:2px; }
+.total-val.ok { color:var(--success-text); }
+.total-val.ng { color:var(--danger-text); }
+.clear-btn { font-size:10px; color:var(--text2); background:none; border:0.5px solid var(--border2); border-radius:var(--radius); padding:2px 7px; cursor:pointer; }
+.clear-btn:hover { background:var(--bg2); }
+.remove-btn { font-size:10px; color:var(--danger-text); background:none; border:0.5px solid var(--danger-border); border-radius:var(--radius); padding:2px 7px; cursor:pointer; }
+.remove-btn:hover { background:var(--danger-bg); }
+.self-note { font-size:10px; margin-top:3px; color:var(--text3); }
+
+/* 年齢計算ツール */
+.age-tool { background:var(--bg2); border-radius:var(--radius-lg); padding:10px 12px; }
+.age-row { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+.age-row label { font-size:11px; color:var(--text2); min-width:50px; }
+.age-row input[type=date] { flex:1; padding:4px 7px; border:0.5px solid var(--border2); border-radius:var(--radius); font-size:12px; background:var(--bg); color:var(--text); }
+.age-result { font-size:11px; color:var(--text2); margin-top:6px; padding-top:6px; border-top:0.5px solid var(--border); line-height:1.7; }
+.age-result strong { font-weight:500; color:var(--text); }
+.age-note { font-size:10px; color:var(--text3); margin-top:4px; line-height:1.5; }
+
+/* メインエリア */
+.results-heading { font-size:11px; font-weight:500; color:var(--text2); margin-bottom:5px; }
+.result-count { font-size:12px; color:var(--text2); margin-bottom:10px; }
+.guide { font-size:13px; color:var(--text2); text-align:center; padding:32px 0; }
+.empty { text-align:center; padding:32px 0; font-size:13px; color:var(--text2); }
+
+/* 結果カード */
+.card { background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:12px 14px; margin-bottom:9px; cursor:pointer; transition:border-color .15s; }
+.card:hover { border-color:var(--border2); }
+.card.open { border-color:var(--info-border); }
+.card-head { display:flex; align-items:flex-start; gap:9px; }
+.badge { flex-shrink:0; font-size:10px; font-weight:500; padding:2px 7px; border-radius:var(--radius); white-space:nowrap; }
+.b-blue   { background:var(--info-bg);    color:var(--info-text); }
+.b-green  { background:var(--success-bg); color:var(--success-text); }
+.b-amber  { background:var(--amber-bg);   color:var(--amber-text); }
+.b-red    { background:var(--danger-bg);  color:var(--danger-text); }
+.b-purple { background:var(--purple-bg);  color:var(--purple-text); }
+.card-summary { flex:1; min-width:0; }
+.card-title { font-size:13px; font-weight:500; color:var(--text); margin-bottom:1px; }
+.new-tag { font-size:10px; font-weight:500; background:var(--purple-bg); color:var(--purple-text); border-radius:4px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
+/* 常時表示エリア */
+.card-visible { margin-top:4px; display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.cv-pill { font-size:11px; background:var(--bg2); color:var(--text2); border-radius:99px; padding:2px 8px; white-space:nowrap; }
+.cv-amount { font-size:13px; font-weight:500; color:var(--success-text); }
+.cv-warn { font-size:11px; color:var(--warning-text); }
+.chevron { margin-left:auto; flex-shrink:0; font-size:10px; color:var(--text3); transition:transform .2s; padding-top:2px; }
+.card.open .chevron { transform:rotate(180deg); }
+/* 詳細エリア */
+.detail { display:none; margin-top:10px; padding-top:10px; border-top:0.5px solid var(--border); }
+.card.open .detail { display:block; }
+.cond-row { display:flex; gap:7px; margin-bottom:5px; font-size:12px; }
+.cond-lbl { flex-shrink:0; width:74px; font-size:10px; font-weight:500; color:var(--text2); padding-top:1px; }
+.cond-val { color:var(--text); line-height:1.5; }
+.cond-sub { font-size:10px; color:var(--text2); margin-top:1px; }
+.amt-box { margin-top:8px; background:var(--bg2); border-radius:var(--radius); padding:8px 10px; }
+.amt-title { font-size:10px; font-weight:500; color:var(--text2); margin-bottom:5px; }
+.amt-table { width:100%; font-size:11px; border-collapse:collapse; }
+.amt-table th { text-align:left; font-weight:400; color:var(--text2); padding:2px 7px 2px 0; vertical-align:top; }
+.amt-table td { font-weight:500; color:var(--text); padding:2px 0; vertical-align:top; white-space:nowrap; }
+.note { font-size:10px; color:var(--text2); margin-top:7px; line-height:1.6; }
+.note b { font-weight:500; color:var(--text); }
+.note-ok  { color:var(--success-text); }
+.note-ng  { color:var(--danger-text); }
+
+@media (max-width:680px) {
+  .layout { flex-direction:column; }
+  .sidebar { width:100%; max-height:none; position:static; border-right:none; border-bottom:0.5px solid var(--border); }
+  .main { padding:14px; }
+  .upd-tag { display:none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ★★★ ここだけ編集してください ★★★ -->
+<script>
+/*
+  【編集方法】
+  " " の中の文字・数字を書き換えて保存→ブラウザリロードで反映。
+  行末のカンマ , は消さないでください。
+  DATA_UPDATED の日付を更新すると画面右上に反映されます。
+*/
+
+const DATA_UPDATED = "2025-12-01（令和7年12月施行 改正対応）";
+
+const DEDUCTIONS = [
+
+  /* ---- 年少扶養親族（15歳以下）-------------------------------- */
+  {
+    id:"dep_minor", sortIncome:0, badge:"b-green", badgeText:"年少扶養",
+    title:"年少扶養親族（住民税の非課税判定）",
+    amountShort:"扶養控除なし",
+    incomeReq:"要件：住民税非課税の人数カウントのみ",
+    matchRule:{ relNot:"spouse", ageIn:["u16"] },
+    conditions:[
+      { l:"対象",    v:"15歳以下（12月31日時点）の扶養親族" },
+      { l:"所得税",  v:"扶養控除の対象外（児童手当が別途支給されるため）" },
+      { l:"住民税",  v:"扶養控除の対象外だが、非課税限度額の人数にカウントされる",
+                     s:"非課税限度額 ＝ 35万円×（本人＋同一生計配偶者＋扶養親族数）＋10万円＋21万円" },
+      { l:"申告方法",v:"年末調整の「住民税に関する事項」欄に氏名を記載（記載漏れ注意）" },
+    ],
+    amounts:[
+      { c:"所得税の扶養控除",   a:"なし" },
+      { c:"住民税の扶養控除",   a:"なし" },
+      { c:"住民税の非課税判定", a:"子ども1人につき35万円分、非課税上限が拡大" },
+    ],
+    note:"⚠️【記載欄注意】年末調整の「住民税に関する事項」欄への記載（所得税の扶養控除欄ではない）。記載欄を間違えると住民税の非課税判定に反映されません。夫婦共働きの場合、所得の少ない方の扶養に入れると住民税が非課税になるケースあり。同一の子を夫婦双方が申告することは不可。障害がある場合は別途「障害者控除」の対象になる場合あり。",
+  },
+
+  /* ---- 配偶者控除 ---------------------------------------------- */
+  {
+    id:"spouse_ctrl", sortIncome:123, badge:"b-blue", badgeText:"配偶者",
+    title:"配偶者控除",
+    amountShort:"控除額：38万円（住民税33万円）〜最大48万円（配偶者70歳以上）",
+    incomeReq:"要件：配偶者の所得58万円以下（給与収入のみ：123万円以下）　※源泉徴収計算は所得95万円以下が対象",
+    matchRule:{ rel:"spouse", incomeMax:58 },
+    conditions:[
+      { l:"対象",         v:"法律上の婚姻関係がある配偶者（内縁不可）" },
+      { l:"配偶者の収入", v:"合計所得 58万円以下", s:"給与収入のみ：123万円以下（旧103万円）" },
+      { l:"生計",         v:"納税者と生計を一にしていること" },
+    ],
+    amounts:[
+      { c:"配偶者70歳未満・納税者所得≦900万", a:"38万円（住民税33万円）" },
+      { c:"配偶者70歳未満・納税者所得900万超〜950万", a:"26万円（住民税22万円）" },
+      { c:"配偶者70歳未満・納税者所得950万超〜1,000万", a:"13万円（住民税11万円）" },
+      { c:"配偶者70歳以上（老人控除対象配偶者）・納税者所得≦900万", a:"48万円（住民税38万円）" },
+      { c:"配偶者70歳以上・納税者所得900万超〜950万", a:"32万円（住民税26万円）" },
+      { c:"配偶者70歳以上・納税者所得950万超〜1,000万", a:"16万円（住民税13万円）" },
+      { c:"納税者所得1,000万超", a:"適用なし" },
+    ],
+    note:"⚠️【源泉徴収との関係】配偶者の所得58万円超〜95万円以下の場合、毎月の源泉徴収計算には反映されますが、年末調整での控除区分は配偶者特別控除として精算されます。令和7年改正で123万円の壁に引き上げ（旧103万円）。住民税への反映は令和8年度分（2026年6月以降）から。【併用可能①】配偶者と死別し再婚していない場合に限り、ひとり親控除と同時に受けられる（死別限定）。【併用可能②】配偶者が障害者の場合は障害者控除も受けられる。",
+  },
+
+  /* ---- 配偶者特別控除 ------------------------------------------ */
+  {
+    id:"spouse_special", sortIncome:201, badge:"b-blue", badgeText:"配偶者",
+    title:"配偶者特別控除",
+    amountShort:"控除額：最大38万円（住民税33万円）",
+    incomeReq:"要件：配偶者の所得58万円超〜133万円以下（給与収入のみ：123万円超〜201万5,999円以下）　※源泉徴収計算は所得95万円以下の場合のみ反映",
+    matchRule:{ rel:"spouse", incomeMin:58, incomeMax:133 },
+    conditions:[
+      { l:"対象",         v:"法律上の婚姻関係がある配偶者" },
+      { l:"配偶者の収入", v:"合計所得 58万円超〜133万円以下",
+                          s:"給与収入のみ：123万円超〜201万5,999円以下（満額38万円は給与160万円まで）" },
+      { l:"納税者の収入", v:"合計所得 1,000万円以下", s:"給与収入のみ：1,195万円以下" },
+    ],
+    amounts:[
+      { c:"配偶者所得58〜68万（給与123〜133万）、納税者≦900万", a:"38万円（住民税33万円）" },
+      { c:"配偶者所得68〜73万（給与133〜138万）、納税者≦900万", a:"36万円（住民税33万円）" },
+      { c:"配偶者所得73〜78万（給与138〜143万）、納税者≦900万", a:"31万円（住民税31万円）" },
+      { c:"配偶者所得78〜83万（給与143〜148万）、納税者≦900万", a:"26万円（住民税26万円）" },
+      { c:"配偶者所得83〜88万（給与148〜153万）、納税者≦900万", a:"21万円（住民税21万円）" },
+      { c:"配偶者所得88〜93万（給与153〜158万）、納税者≦900万", a:"16万円（住民税16万円）" },
+      { c:"配偶者所得93〜98万（給与158〜163万）、納税者≦900万", a:"11万円（住民税11万円）" },
+      { c:"配偶者所得98〜103万（給与163〜168万）、納税者≦900万", a:"6万円（住民税6万円）" },
+      { c:"配偶者所得103〜133万（給与168〜201万）、納税者≦900万", a:"3万円（住民税3万円）" },
+    ],
+    note:"⚠️【源泉徴収との関係】配偶者の所得95万円超〜133万円以下の場合、毎月の源泉徴収計算には反映されません（年末調整のみで適用）。所得95万円以下なら源泉控除対象配偶者として毎月の源泉徴収にも反映されます。納税者の所得900万超で控除額がさらに減少し、1,000万超は適用なし。夫婦が互いに適用することは不可（どちらか一方のみ）。70歳以上の配偶者には控除額の上乗せなし（配偶者控除と異なる点）。",
+  },
+
+  /* ---- 源泉控除対象配偶者（毎月の源泉徴収用）----------------- */
+  {
+    id:"spouse_gensen", sortIncome:90, badge:"b-blue", badgeText:"配偶者",
+    title:"源泉控除対象配偶者（毎月の源泉徴収計算用）",
+    amountShort:"控除額：毎月の源泉徴収税額が扶養1人分少なくなる",
+    incomeReq:"要件：配偶者の所得95万円以下（給与収入のみ：160万円以下）／職員の所得900万円以下",
+    matchRule:{ rel:"spouse", incomeMax:95 },
+    conditions:[
+      { l:"📋 用途",       v:"毎月の給与から源泉徴収する所得税額の計算に使う区分（年末調整・確定申告での控除額とは別の概念）" },
+      { l:"配偶者の収入", v:"合計所得 95万円以下", s:"給与収入のみ：160万円以下（令和7年改正で150万円→160万円に引き上げ）" },
+      { l:"職員の収入",   v:"合計所得 900万円以下（超える場合は源泉控除対象配偶者に該当しない）" },
+      { l:"申告方法",     v:"「給与所得者の扶養控除等（異動）申告書」の源泉控除対象配偶者欄に記載して提出" },
+    ],
+    amounts:[
+      { c:"源泉徴収計算上の効果", a:"扶養親族1人分として扶養等の数に加算（毎月の天引き税額が減少）" },
+      { c:"年末調整での控除",     a:"配偶者控除（所得58万円以下）または配偶者特別控除（58万円超〜133万円以下）で精算" },
+    ],
+    note:"扶養控除等異動申告書の「源泉控除対象配偶者」欄に記載するだけでOK（別書類の提出は不要）。ただし年末調整で配偶者控除・配偶者特別控除の適用を受けるには、別途「給与所得者の配偶者控除等申告書（基礎控除申告書と兼用）」の提出も必要。所得58万円超〜95万円以下の配偶者は毎月の源泉徴収では源泉控除対象配偶者として扱われ、年末調整で配偶者特別控除に精算されます。",
+  },
+
+  /* ---- 源泉控除対象親族（19〜22歳・毎月の源泉徴収用）--------- */
+  {
+    id:"dep_gensen_1922", sortIncome:165, badge:"b-green", badgeText:"扶養",
+    title:"源泉控除対象親族・19〜22歳（毎月の源泉徴収計算用）",
+    amountShort:"控除額：毎月の源泉徴収税額が扶養1人分少なくなる",
+    incomeReq:"要件：19〜22歳の親族の所得58万円超〜100万円以下（給与収入のみ：123万円超〜165万円以下）",
+    matchRule:{ relNot:"spouse", ageIn:["19_22"], incomeMin:58, incomeMax:100 },
+    conditions:[
+      { l:"📋 用途",    v:"毎月の給与から源泉徴収する所得税額の計算に使う区分（令和8年1月以降の源泉徴収から適用）" },
+      { l:"対象親族の収入", v:"合計所得 58万円超〜100万円以下", s:"給与収入のみ：123万円超〜165万円以下" },
+      { l:"年末調整との違い", v:"年末調整では所得123万円以下まで「特定親族特別控除」が適用されるが、毎月の源泉徴収計算では100万円以下の場合のみ扶養等の数に加算される" },
+      { l:"申告方法",   v:"「給与所得者の扶養控除等（異動）申告書」の源泉控除対象親族欄に記載（令和8年分以降の様式から）" },
+    ],
+    amounts:[
+      { c:"源泉徴収計算上の効果（所得58万超〜100万以下）", a:"扶養親族1人分として扶養等の数に加算（毎月の天引き税額が減少）" },
+      { c:"所得100万超〜123万以下の場合",                  a:"毎月の源泉徴収には反映されない（年末調整で特定親族特別控除として精算）" },
+    ],
+    note:"扶養控除等異動申告書の「源泉控除対象親族」欄に記載するだけでOK（所得100万円以下の場合）。【所得100万円超〜123万円以下の場合】毎月の源泉徴収には反映されないため、年末調整時に「特定親族特別控除申告書（基礎控除申告書と兼用の書類）」を別途提出して初めて控除が反映されます。",
+  },
+
+  /* ---- 扶養控除（一般）----------------------------------------- */
+  {
+    id:"dep_general", sortIncome:123, badge:"b-green", badgeText:"扶養",
+    title:"扶養控除（一般）",
+    amountShort:"控除額：38万円（住民税33万円）",
+    incomeReq:"要件：扶養家族の所得58万円以下（給与収入のみ：123万円以下）",
+    matchRule:{ relNot:"spouse", ageIn:["16_18","23_69"], incomeMax:58 },
+    conditions:[
+      { l:"対象", v:"配偶者以外の親族（6親等以内の血族・3親等以内の姻族）" },
+      { l:"年齢", v:"16〜18歳 または 23〜69歳（12月31日時点）" },
+      { l:"収入", v:"合計所得 58万円以下", s:"給与収入のみ：123万円以下" },
+      { l:"生計", v:"納税者と生計を一にしていること" },
+    ],
+    amounts:[{ c:"16〜18歳 / 23〜69歳", a:"38万円（住民税33万円）" }],
+    note:"15歳以下は対象外（児童手当が別途支給のため）。令和7年分の所得税から適用。住民税への反映は令和8年度分（2026年6月以降）から。【併用可能】扶養家族が障害者・特別障害者に該当する場合は障害者控除も受けられる。",
+  },
+
+  /* ---- 扶養控除（特定扶養親族）--------------------------------- */
+  {
+    id:"dep_specific", sortIncome:123, badge:"b-green", badgeText:"扶養",
+    title:"扶養控除（特定扶養親族）",
+    amountShort:"控除額：63万円（住民税45万円）",
+    incomeReq:"要件：扶養家族の所得58万円以下（給与収入のみ：123万円以下）",
+    matchRule:{ relNot:"spouse", ageIn:["19_22"], incomeMax:58 },
+    conditions:[
+      { l:"対象", v:"19〜22歳の扶養親族（12月31日時点）" },
+      { l:"収入", v:"合計所得 58万円以下", s:"給与収入のみ：123万円以下（旧103万円）" },
+      { l:"生計", v:"納税者と生計を一にしていること" },
+    ],
+    amounts:[{ c:"19〜22歳（給与123万円以下）", a:"63万円（住民税45万円）" }],
+    note:"所得58万円以下なら本控除（63万円）が自動的に適用される。58万円超〜123万円以下の場合は「特定親族特別控除」が代わりに適用される（控除額は段階的に減少）。【併用可能】扶養家族が障害者に該当する場合は障害者控除も受けられる。【注意①】所得58万円超の場合（特定親族特別控除の対象）は扶養控除対象外のため、障害者控除との併用不可。【注意②】配偶者は対象外。【注意③】同一の特定親族に対して申告できるのは納税者一人のみ。",
+  },
+
+  /* ---- 特定親族特別控除（令和7年新設）------------------------- */
+  {
+    id:"dep_tokutei", sortIncome:188, badge:"b-green", badgeText:"扶養", isNew:true,
+    title:"特定親族特別控除（令和7年新設）",
+    amountShort:"控除額：最大63万円（住民税45万円）",
+    incomeReq:"要件：扶養家族の所得58万円超〜123万円以下（給与収入のみ：123万円超〜188万円以下）",
+    matchRule:{ relNot:"spouse", ageIn:["19_22"], incomeMin:58, incomeMax:123 },
+    conditions:[
+      { l:"対象",    v:"19〜22歳の親族（配偶者・専従者を除く）" },
+      { l:"収入",    v:"合計所得 58万円超〜123万円以下", s:"給与収入のみ：123万円超〜188万円以下" },
+      { l:"適用関係",v:"所得58万円以下→特定扶養控除（63万円）、58万円超→本控除に自動切替" },
+    ],
+    amounts:[
+      { c:"所得58〜85万（給与123〜150万）満額", a:"63万円（住民税45万円）" },
+      { c:"所得85〜93万（給与150〜158万）", a:"61〜51万円（段階的）" },
+      { c:"所得93〜103万（給与158〜168万）", a:"41〜21万円（段階的）" },
+      { c:"所得103〜113万（給与168〜178万）", a:"11〜6万円（段階的）" },
+      { c:"所得113〜123万（給与178〜188万）", a:"3万円（住民税2万円）" },
+    ],
+    note:"⚠️【別書類が必要】「給与所得者の特定親族特別控除申告書」（扶養控除等申告書とは別の書類）を提出しないと年末調整に反映されません。また毎月の源泉徴収計算では所得58万超〜100万円以下のみ反映、100万円超〜123万円以下は年末調整のみで適用されます。令和7年分の所得税から適用。住民税への反映は令和8年度分から。【注意①】所得58万円超の対象親族は扶養控除対象外のため、障害者控除との併用不可。【注意②】配偶者は対象外。【注意③】同一の特定親族に対して申告できるのは納税者一人のみ。",
+  },
+
+  /* ---- 扶養控除（老人扶養親族）--------------------------------- */
+  {
+    id:"dep_elderly", sortIncome:123, badge:"b-green", badgeText:"扶養",
+    title:"扶養控除（老人扶養親族）",
+    amountShort:"控除額：48万円（別居）または58万円（同居老親等）",
+    incomeReq:"要件：扶養家族の所得58万円以下（年金収入のみ：168万円以下）",
+    matchRule:{ relNot:"spouse", ageIn:["70plus"], incomeMax:58 },
+    conditions:[
+      { l:"対象",        v:"70歳以上の扶養親族（70歳以上は必ず65歳以上に該当）" },
+      { l:"収入（給与）", v:"合計所得 58万円以下", s:"給与収入のみ：123万円以下" },
+      { l:"収入（年金）", v:"65歳以上・年金収入のみ：168万円以下",
+                          s:"168万円 − 公的年金等控除110万円 ＝ 所得58万円" },
+      { l:"同居の定義",  v:"「同居老親等」は直系尊属（親・祖父母）で同居の場合のみ",
+                          s:"義父母・配偶者の親は対象外。老人ホーム・病院への入所・入院は「同居」に非該当" },
+    ],
+    amounts:[
+      { c:"同居以外（別居含む）",         a:"48万円（住民税38万円）" },
+      { c:"同居老親等（直系尊属で同居）", a:"58万円（住民税45万円）" },
+    ],
+    note:"【併用可能】扶養家族が障害者・特別障害者に該当する場合は障害者控除も受けられる。",
+  },
+
+  /* ---- 障害者控除（一般）-------------------------------------- */
+  {
+    id:"disability_g", sortIncome:0, badge:"b-amber", badgeText:"障害者",
+    title:"障害者控除（一般）",
+    amountShort:"控除額：27万円（住民税26万円）",
+    incomeReq:"要件：本人は収入要件なし。家族の場合は所得58万円以下",
+    matchRule:{ special:"disability_general", specialNot:["disability_special","cohabit_disability"] },
+    conditions:[
+      { l:"対象（本人）",  v:"納税者本人が一般障害者の場合：収入要件なし、無条件で適用" },
+      { l:"対象（家族）",  v:"控除対象配偶者または扶養親族が一般障害者の場合：その家族の合計所得 58万円以下が条件" },
+      { l:"認定基準",      v:"障害者手帳（身体・精神・療育）保持、または市区町村長・医師の認定" },
+    ],
+    amounts:[{ c:"一般障害者（本人・配偶者・扶養家族いずれも同額）", a:"27万円（住民税26万円）" }],
+    note:"扶養控除・配偶者控除・ひとり親控除・寡婦控除と重複して適用可。家族が15歳以下（年少扶養親族）で障害がある場合も対象になる。",
+  },
+
+  /* ---- 障害者控除（特別障害者）-------------------------------- */
+  {
+    id:"disability_s", sortIncome:0, badge:"b-amber", badgeText:"障害者",
+    title:"障害者控除（特別障害者）",
+    amountShort:"控除額：40万円（住民税30万円）",
+    incomeReq:"要件：本人は収入要件なし。家族の場合は所得58万円以下",
+    matchRule:{ special:"disability_special", specialNot:["cohabit_disability"] },
+    conditions:[
+      { l:"対象（本人）",  v:"納税者本人が特別障害者の場合：収入要件なし、無条件で適用" },
+      { l:"対象（家族）",  v:"控除対象配偶者または扶養親族が特別障害者の場合：その家族の合計所得 58万円以下が条件" },
+      { l:"認定基準",      v:"身体障害者手帳1・2級、療育手帳A、精神保健福祉手帳1級、常に就床・複雑な介護が必要な状態など" },
+    ],
+    amounts:[{ c:"特別障害者（本人・配偶者・扶養家族いずれも同額）", a:"40万円（住民税30万円）" }],
+    note:"扶養控除・配偶者控除・ひとり親控除・寡婦控除と重複して適用可。対象の特別障害者が同居している扶養家族の場合は「同居特別障害者」としてさらに控除額が増加する。",
+  },
+
+  /* ---- 障害者控除（同居特別障害者）---------------------------- */
+  {
+    id:"disability_c", sortIncome:0, badge:"b-amber", badgeText:"障害者",
+    title:"障害者控除（同居特別障害者）",
+    amountShort:"控除額：75万円（住民税53万円）",
+    incomeReq:"要件：対象家族の所得58万円以下（同居が条件）",
+    matchRule:{ special:"cohabit_disability" },
+    conditions:[
+      { l:"対象",       v:"特別障害者に該当する扶養親族（または控除対象配偶者）と同居している場合" },
+      { l:"同居の定義", v:"生計を一にし、常に同じ家に住んでいる状態（入院・施設入所は原則「同居」に非該当）" },
+      { l:"収入要件",   v:"対象の扶養親族・配偶者の合計所得 58万円以下" },
+    ],
+    amounts:[{ c:"同居特別障害者", a:"75万円（住民税53万円）" }],
+    note:"扶養控除・配偶者控除・ひとり親控除・寡婦控除と重複して適用可。障害者控除の中で最も控除額が大きい。本人が特別障害者の場合は同居に関わらず「特別障害者」（40万円）が適用される。",
+  },
+
+  /* ---- ひとり親控除 -------------------------------------------- */
+  {
+    id:"single_parent", sortIncome:677, badge:"b-red", badgeText:"ひとり親",
+    section:"self",
+    title:"ひとり親控除",
+    amountShort:"控除額：35万円（住民税30万円）",
+    incomeReq:"要件：本人の所得500万円以下（給与収入のみ：677万円以下）",
+    matchRule:{ selfSpecial:"single_parent" },
+    conditions:[
+      { l:"対象",       v:"現在婚姻していない（未婚・離婚・死別）人　※男女問わず対象" },
+      { l:"子の要件",   v:"合計所得 58万円以下の子を扶養（その子が他者の扶養親族でないこと）",
+                         s:"給与収入のみ：子の年収123万円以下" },
+      { l:"本人の収入", v:"合計所得 500万円以下", s:"給与収入のみ：677万円以下" },
+      { l:"男性について",v:"令和元年以前の「寡夫控除」は令和2年にひとり親控除に廃止・統合。控除額も27万円→35万円に増額" },
+    ],
+    amounts:[{ c:"男女問わず", a:"35万円（住民税30万円）" }],
+    note:"事実婚・内縁関係がある場合は対象外。令和7年改正で子の収入上限103万円→123万円に引き上げ。【併用可能①】配偶者と死別し再婚していない場合に限り、配偶者控除（亡くなった配偶者の所得58万円以下が条件）と同時に受けられる。離婚・未婚は配偶者控除との併用不可。【併用可能②】本人または扶養する子が障害者・特別障害者に該当する場合は障害者控除も受けられる。",
+  },
+
+  /* ---- 寡婦控除 ------------------------------------------------ */
+  {
+    id:"widow", sortIncome:677, badge:"b-red", badgeText:"寡婦",
+    section:"self",
+    title:"寡婦控除",
+    amountShort:"控除額：27万円（住民税26万円）",
+    incomeReq:"要件：本人の所得500万円以下（給与収入のみ：677万円以下）",
+    matchRule:{ selfSpecial:"widow" },
+    conditions:[
+      { l:"対象",       v:"離婚または夫と死別した女性（男性は対象外）" },
+      { l:"子の有無",   v:"扶養している子がいないこと（いる場合はひとり親控除が優先・有利）" },
+      { l:"本人の収入", v:"合計所得 500万円以下", s:"給与収入のみ：677万円以下" },
+      { l:"再婚",       v:"再婚していないこと（事実婚・内縁関係がある場合も対象外）" },
+    ],
+    amounts:[{ c:"離婚・死別した女性（子なし）", a:"27万円（住民税26万円）" }],
+    note:"ひとり親控除（35万円）より控除額が少ない。【併用可能①】扶養親族（子以外）がいる場合は扶養控除も受けられる。【併用可能②】本人または扶養親族が障害者・特別障害者に該当する場合は障害者控除も受けられる。",
+  },
+
+  /* ---- 基礎控除 ----------------------------------------------- */
+  {
+    id:"kiso", sortIncome:2350, badge:"b-purple", badgeText:"本人",
+    title:"基礎控除",
+    amountShort:"控除額：58万円〜最大95万円",
+    incomeReq:"要件：合計所得2,350万円以下（超えると控除0円）",
+    section:"self",
+    matchRule:{ selfSpecial:"kiso" },
+    conditions:[
+      { l:"対象",   v:"すべての納税者本人に適用（申告不要で自動適用）" },
+      { l:"控除額", v:"合計所得132万円以下：95万円 / 132万超336万以下：88万円 / 336万超489万以下：68万円",
+                    s:"489万超655万以下：63万円 / 655万超2,350万以下：58万円 / 2,350万超：0円" },
+    ],
+    amounts:[
+      { c:"合計所得 132万円以下（給与収入のみ：200万4,000円未満）", a:"95万円" },
+      { c:"合計所得 132万超〜655万円以下", a:"88〜58万円（段階的）" },
+      { c:"合計所得 655万超〜2,350万円以下", a:"58万円" },
+      { c:"合計所得 2,350万円超", a:"0円（適用なし）" },
+    ],
+    note:"⚠️【別書類が必要】「基礎控除申告書（＝配偶者控除等申告書と兼用）」を提出しないと令和7年改正の引き上げ分が年末調整に反映されません。令和7年度改正で基礎控除が大幅に引き上げられた（旧：一律48万円）。合計所得が低いほど控除額が大きくなる逆進的な仕組み。住民税の基礎控除は43万円のまま据え置き（所得税のみ改正）。",
+  },
+
+  /* ---- 給与所得控除 -------------------------------------------- */
+  {
+    id:"kyuyo", sortIncome:9999, badge:"b-purple", badgeText:"本人",
+    title:"給与所得控除",
+    amountShort:"控除額：最低保障65万円〜最大195万円",
+    incomeReq:"要件：給与収入がある人全員に自動適用",
+    section:"self",
+    matchRule:{ selfSpecial:"kyuyo" },
+    conditions:[
+      { l:"対象",   v:"給与収入がある人全員に自動適用（申告不要）" },
+      { l:"計算",   v:"給与収入金額に応じて自動計算される必要経費相当の控除" },
+    ],
+    amounts:[
+      { c:"給与収入 162.5万円以下", a:"65万円（最低保障）" },
+      { c:"給与収入 162.5万超〜180万以下", a:"収入×40%−10万円" },
+      { c:"給与収入 180万超〜360万以下",   a:"収入×30%＋8万円" },
+      { c:"給与収入 360万超〜660万以下",   a:"収入×20%＋44万円" },
+      { c:"給与収入 660万超〜850万以下",   a:"収入×10%＋110万円" },
+      { c:"給与収入 850万超",              a:"195万円（上限）" },
+    ],
+    note:"✅【申告不要・自動適用】別途申告は不要です。令和7年改正で最低保障額が55万円→65万円に引き上げ（旧：55万円）。これにより給与収入123万円以下なら給与所得が58万円以下となり、配偶者・扶養の収入要件の判定に影響する。",
+  },
+
+  /* ---- 障害者控除（本人が障害者）------------------------------ */
+  {
+    id:"disability_self", sortIncome:0, badge:"b-amber", badgeText:"本人障害",
+    title:"障害者控除（本人が障害者）",
+    amountShort:"控除額：27万円（一般）／40万円（特別）",
+    incomeReq:"要件：収入要件なし（本人が対象の場合は所得に関わらず適用）",
+    section:"self",
+    matchRule:{ selfSpecial:"disability_self" },
+    conditions:[
+      { l:"一般障害者", v:"障害者手帳（身体・精神・療育）保持、または医師の診断書等による認定" },
+      { l:"特別障害者", v:"身体障害者手帳1・2級、療育手帳A、精神保健福祉手帳1級など重度の障害" },
+      { l:"収入要件",   v:"本人が対象の場合：収入要件なし、無条件で適用" },
+    ],
+    amounts:[
+      { c:"一般障害者", a:"27万円（住民税26万円）" },
+      { c:"特別障害者", a:"40万円（住民税30万円）" },
+    ],
+    note:"扶養控除・配偶者控除・ひとり親控除・寡婦控除と重複して適用可。家族が障害者の場合は「家族の状況」の障害者控除を参照。",
+  },
+
+  /* ---- 所得金額調整控除 ---------------------------------------- */
+  {
+    id:"income_adj", sortIncome:850, badge:"b-purple", badgeText:"本人",
+    title:"所得金額調整控除",
+    amountShort:"控除額：最大15万円（給与収入850万円超の部分×10%）",
+    incomeReq:"要件：給与収入850万円超で、①本人が特別障害者、②扶養の配偶者・親族が特別障害者、③23歳未満の扶養親族がいる、のいずれかに該当",
+    section:"self",
+    matchRule:{ selfSpecial:"income_adj" },
+    conditions:[
+      { l:"対象",     v:"給与収入が850万円を超え、かつ次の①〜③のいずれかに該当する人",
+                      s:"①本人が特別障害者　②同一生計配偶者または扶養親族が特別障害者　③年齢23歳未満の扶養親族がいる" },
+      { l:"給与収入", v:"850万円超（1,000万円超の場合は1,000万円として計算）" },
+      { l:"控除の性質", v:"所得控除ではなく「給与所得の金額そのもの」を減額する控除（課税所得の計算前に差し引く）" },
+    ],
+    amounts:[
+      { c:"控除額の計算式", a:"（給与収入金額 − 850万円）× 10%（1,000万円超の場合は上限1,000万円）" },
+      { c:"控除額の上限",   a:"15万円（給与収入1,000万円以上で上限到達）" },
+      { c:"夫婦ともに該当する場合", a:"双方それぞれで適用可（扶養控除と異なり一方のみという制限なし）" },
+    ],
+    note:"⚠️【別書類が必要】「所得金額調整控除申告書（基礎控除申告書と兼用の書類）」を提出しないと年末調整に反映されません。給与所得と年金所得の双方がある場合の調整控除（年金等）は年末調整では対応不可のため、確定申告が必要。令和2年の給与所得控除の上限引き下げに伴う税負担増加を緩和する目的で創設。",
+  },
+
+  /* ---- 勤労学生控除 -------------------------------------------- */
+  {
+    id:"student", sortIncome:150, badge:"b-purple", badgeText:"勤労学生",
+    section:"self",
+    title:"勤労学生控除",
+    amountShort:"控除額：27万円（住民税26万円）",
+    incomeReq:"要件：本人の所得85万円以下（給与収入のみ：150万円以下）",
+    matchRule:{ selfSpecial:"student" },
+    conditions:[
+      { l:"対象",    v:"給与所得などの勤労による所得がある学生・生徒本人に適用される控除（親への控除ではない）" },
+      { l:"収入要件", v:"合計所得 85万円以下（給与収入のみ：150万円以下）かつ勤労以外の所得が10万円以下" },
+      { l:"学校要件", v:"学校教育法の大学・高校・専修学校、または職業訓練校の在籍者" },
+    ],
+    amounts:[
+      { c:"所得税", a:"27万円" },
+      { c:"住民税", a:"26万円" },
+    ],
+    note:"令和7年改正で所得要件75万円→85万円に引き上げ（給与収入換算：130万円→150万円）。令和7年改正後、所得税については基礎控除の引き上げにより給与収入160万円まで所得税が非課税となったため、所得税軽減の実益は薄い。住民税については基礎控除が48万円のまま据え置きのため、住民税軽減の効果は引き続きある。【注意】学生の年収が123万円を超えると、親の扶養控除の対象外となり、親の税負担が増加する点に注意。",
+  },
+
+]; /* ★編集エリアここまで★ */
+
+/* ============================================================
+   ここより下は編集不要です
+   ============================================================ */
+</script>
+
+<div class="page-header">
+  <h1>所得税・住民税 控除ガイド</h1>
+  <span class="rev-tag">令和7年12月施行 改正対応</span>
+  <span class="upd-tag" id="upd-label"></span>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+
+    <!-- すべてクリア -->
+    <div class="sec" style="margin-bottom:12px">
+      <button onclick="clearAll()" style="width:100%;padding:7px 0;border:0.5px solid var(--danger-border);border-radius:var(--radius);font-size:12px;cursor:pointer;background:transparent;color:var(--danger-text);font-weight:500;">すべてクリア</button>
+    </div>
+
+    <!-- ══ 家族の状況 ══ -->
+    <div style="font-size:12px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:10px;padding:7px 10px;background:var(--info-bg);color:var(--info-text);border-radius:var(--radius);border-left:3px solid var(--info-border)">👨‍👩‍👧 家族の状況</div>
+
+    <!-- 家族の続柄 -->
+    <div class="sec">
+      <div class="sec-label">続柄
+        <button class="clear-btn" onclick="clearRel()">クリア</button>
+      </div>
+      <div class="chips" id="chips-rel">
+        <button class="chip" data-val="spouse"  onclick="selOne('rel',this)">配偶者</button>
+        <button class="chip" data-val="child"   onclick="selOne('rel',this)">子ども</button>
+        <button class="chip" data-val="parent"  onclick="selOne('rel',this)">親・祖父母</button>
+        <button class="chip" data-val="sibling" onclick="selOne('rel',this)">兄弟・姉妹</button>
+        <button class="chip" data-val="other"   onclick="selOne('rel',this)">その他親族</button>
+      </div>
+    </div>
+
+    <!-- 家族の年齢 -->
+    <div class="sec">
+      <div class="sec-label">年齢
+        <button class="clear-btn" onclick="clearAge()">クリア</button>
+      </div>
+      <div class="chips" id="chips-age">
+        <button class="chip" data-val="u16"    onclick="selOne('age',this)">15歳以下</button>
+        <button class="chip" data-val="16_18"  onclick="selOne('age',this)">16〜18歳</button>
+        <button class="chip" data-val="19_22"  onclick="selOne('age',this)">19〜22歳</button>
+        <button class="chip" data-val="23_69"  onclick="selOne('age',this)">23〜69歳</button>
+        <button class="chip" data-val="70plus" onclick="selOne('age',this)">70歳以上</button>
+      </div>
+    </div>
+
+    <!-- 家族の収入 -->
+    <div class="sec">
+      <div class="sec-label">収入
+        <button class="clear-btn" onclick="clearAllIncome()">クリア</button>
+      </div>
+      <div id="inc-blocks"></div>
+      <button class="add-btn" onclick="addIncomeBlock()">＋ 収入を追加</button>
+      <div id="total-box" style="display:none" class="total-box">
+        <div class="total-label">合計所得（概算）</div>
+        <div class="total-val" id="total-val">—</div>
+      </div>
+    </div>
+
+    <!-- 家族の障害（任意） -->
+    <div class="sec">
+      <div class="sec-label">障害（任意・複数可）
+        <button class="clear-btn" onclick="resetSpecial()">クリア</button>
+      </div>
+      <div class="chips" id="chips-special">
+        <button class="chip" data-val="disability_general"  onclick="selMulti('fam',this)">障害あり（一般）</button>
+        <button class="chip" data-val="disability_special"  onclick="selMulti('fam',this)">重度障害（特別）</button>
+        <button class="chip" data-val="cohabit_disability"  onclick="selMulti('fam',this)">重度障害・同居</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ══ 本人の状況 ══ -->
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.04em;margin-bottom:10px;padding:7px 10px;background:var(--success-bg);color:var(--success-text);border-radius:var(--radius);border-left:3px solid var(--success-border)">👤 本人の状況</div>
+
+    <!-- 職員（本人）の所得 -->
+    <div class="sec">
+      <div class="sec-label">職員（本人）の合計所得
+        <button class="clear-btn" onclick="clearSelf()">クリア</button>
+      </div>
+      <div class="inc-row">
+        <label style="min-width:0;font-size:11px;color:var(--text2)">合計所得</label>
+        <input type="number" id="self-income" min="0" step="1" placeholder="空欄＝1,000万円未満"
+          style="width:150px;" onchange="onSelfChange(this.value)">
+        <span class="unit">万円</span>
+      </div>
+      <div class="self-note" id="self-note">空欄の場合は1,000万円未満として判定します</div>
+    </div>
+
+    <!-- 本人の状況（任意・複数可） -->
+    <div class="sec">
+      <div class="sec-label">本人の状況（任意・複数可）
+        <button class="clear-btn" onclick="resetSelfSpecial()">クリア</button>
+      </div>
+      <div class="chips" id="chips-self-special">
+        <button class="chip" data-val="kiso"            onclick="selMulti('self',this)">基礎控除</button>
+        <button class="chip" data-val="kyuyo"           onclick="selMulti('self',this)">給与所得控除</button>
+        <button class="chip" data-val="disability_self" onclick="selMulti('self',this)">障害者（本人）</button>
+        <button class="chip" data-val="single_parent"   onclick="selMulti('self',this)">ひとり親</button>
+        <button class="chip" data-val="widow"           onclick="selMulti('self',this)">寡婦</button>
+        <button class="chip" data-val="income_adj"      onclick="selMulti('self',this)">所得金額調整</button>
+        <button class="chip" data-val="student"         onclick="selMulti('self',this)">勤労学生</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- 年齢計算ツール -->
+    <div class="sec">
+      <div class="sec-label">税法上の年齢を計算</div>
+      <div class="age-tool">
+        <div class="age-row">
+          <label>生年月日</label>
+          <input type="date" id="bdate" onchange="calcAge()">
+        </div>
+        <div class="age-result" id="age-result" style="display:none"></div>
+        <div class="age-note">
+          ※税法上の年齢は「誕生日の前日」に加算されます（年齢計算ニ関スル法律・民法143条）。例：4月1日生まれは3月31日に年齢が上がるため、4月1日生まれと4月2日生まれで学年が変わります。所得税の年齢判定は12月31日時点で行います。
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <div class="main">
+    <div class="results-heading">該当する控除</div>
+    <div class="result-count" id="result-count"></div>
+    <div id="results"><div class="guide">左の条件を選択すると、該当する控除が表示されます。</div></div>
+  </div>
+</div>
+
+<script>
+document.getElementById('upd-label').textContent = 'データ更新日: ' + DATA_UPDATED;
+
+const state = {
+  rel: null, age: null,
+  famSpecial: new Set(),
+  selfSpecial: new Set(),
+  selfIncome: null,
+};
+let incomeBlocks = [];
+let blockId = 0;
+
+const INC_TYPES = [
+  { val:'salary',   label:'給与収入' },
+  { val:'pension',  label:'年金収入' },
+  { val:'business', label:'事業収入' },
+  { val:'other',    label:'その他収入' },
+];
+
+/* ---- 所得計算 ---- */
+function calcDeduction(type, gross, dm, is65) {
+  if (type==='salary') {
+    if (gross<=162.5) return 65;
+    if (gross<=180)   return gross*0.4-10;
+    if (gross<=360)   return gross*0.3+8;
+    if (gross<=660)   return gross*0.2+44;
+    if (gross<=850)   return gross*0.1+110;
+    return 195;
+  }
+  if (type==='pension') {
+    if (is65) {
+      if (gross<=330)  return 110;
+      if (gross<=410)  return gross*0.25+27.5;
+      if (gross<=770)  return gross*0.15+68.5;
+      if (gross<=1000) return gross*0.05+145.5;
+      return 195.5;
+    } else {
+      if (gross<=130)  return 60;
+      if (gross<=410)  return gross*0.25+27.5;
+      if (gross<=770)  return gross*0.15+68.5;
+      if (gross<=1000) return gross*0.05+145.5;
+      return 195.5;
+    }
+  }
+  if (type==='business') return isNaN(dm)?0:dm;
+  return 0;
+}
+function blockIncome(b) {
+  const gross = parseFloat(b.gross)||0;
+  const dm    = parseFloat(b.deductManual)||0;
+  // 年金収入は個別ブロックのis65フラグを使用、その他は年齢チップから判断
+  const is65 = b.type==='pension' ? (b.is65===true) : (state.age==='70plus');
+  return Math.max(0, gross - calcDeduction(b.type, gross, dm, is65));
+}
+function totalIncome() {
+  if (!incomeBlocks.length) return null;
+  if (!incomeBlocks.some(b=>b.gross!==''&&!isNaN(parseFloat(b.gross)))) return null;
+  return incomeBlocks.reduce((s,b)=>s+blockIncome(b), 0);
+}
+
+/* ---- 収入ブロック ---- */
+function addIncomeBlock() {
+  incomeBlocks.push({ id:++blockId, type:'salary', gross:'', deductManual:'', is65:false });
+  renderIncomeBlocks(); render();
+}
+function setPensionAge(id, is65) {
+  const b = incomeBlocks.find(b=>b.id===id);
+  if (b) b.is65 = is65;
+  renderIncomeBlocks(); render();
+}
+function removeIncomeBlock(id) {
+  incomeBlocks = incomeBlocks.filter(b=>b.id!==id);
+  renderIncomeBlocks(); render();
+}
+function clearAllIncome() {
+  incomeBlocks = [{ id:++blockId, type:'salary', gross:'', deductManual:'', is65:false }];
+  renderIncomeBlocks(); render();
+}
+function updateBlock(id, field, val) {
+  const b = incomeBlocks.find(b=>b.id===id);
+  if (b) {
+    b[field] = val;
+    if (field==='type') b.is65 = false; // 収入種別変更時はis65をリセット
+  }
+  renderIncomeBlocks(); render();
+}
+
+function blockHTML(b) {
+  const is65    = state.age==='70plus';
+  const typeOpts = INC_TYPES.map(t=>`<option value="${t.val}"${t.val===b.type?' selected':''}>${t.label}</option>`).join('');
+  const rowLabel = b.type==='business'?'収入（売上）':b.type==='other'?'収入または所得':(INC_TYPES.find(t=>t.val===b.type)?.label||'');
+  let hint='', extraRow='';
+  if      (b.type==='salary')   hint='給与所得控除が自動計算されます（最低保障65万円）';
+  else if (b.type==='pension') {
+    const pensionIs65 = b.is65 === true;
+    extraRow = `<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--text2)">年齢：</span>
+      <button onclick="setPensionAge(${b.id},false)" style="padding:3px 10px;border:0.5px solid ${!pensionIs65?'var(--info-border)':'var(--border2)'};border-radius:99px;font-size:11px;cursor:pointer;background:${!pensionIs65?'var(--info-bg)':'transparent'};color:${!pensionIs65?'var(--info-text)':'var(--text2)'}">65歳未満</button>
+      <button onclick="setPensionAge(${b.id},true)"  style="padding:3px 10px;border:0.5px solid ${pensionIs65?'var(--info-border)':'var(--border2)'};border-radius:99px;font-size:11px;cursor:pointer;background:${pensionIs65?'var(--info-bg)':'transparent'};color:${pensionIs65?'var(--info-text)':'var(--text2)'}">65歳以上</button>
+    </div>`;
+    hint = pensionIs65
+      ? '65歳以上：公的年金等控除が自動計算されます（最低保障110万円 → 年金収入168万円以下で所得58万円以下）'
+      : '65歳未満：公的年金等控除が自動計算されます（最低保障60万円 → 年金収入118万円以下で所得58万円以下）';
+  }
+  else if (b.type==='business') {
+    extraRow=`<div class="inc-row" style="margin-top:5px"><label>必要経費・控除額</label><input type="number" id="dm-${b.id}" min="0" step="0.1" placeholder="例：80" value="${b.deductManual}" onchange="updateBlock(${b.id},'deductManual',this.value)"><span class="unit">万円</span></div>`;
+    hint='事業所得＝収入－必要経費。青色申告控除（最大65万円）も含めて入力してください。';
+  }
+  else if (b.type==='other') hint='一時所得・雑所得など。控除がない場合は収入金額をそのまま所得として入力してください。';
+  return `<div class="inc-block" id="blk-${b.id}">
+    <div class="inc-head">
+      <select onchange="updateBlock(${b.id},'type',this.value)">${typeOpts}</select>
+      <button class="remove-btn" onclick="removeIncomeBlock(${b.id})">削除</button>
+    </div>
+    <div class="inc-row">
+      <label>${rowLabel}</label>
+      <input type="number" id="gr-${b.id}" min="0" step="0.1" placeholder="例：120" value="${b.gross}" onchange="updateBlock(${b.id},'gross',this.value)">
+      <span class="unit">万円</span>
+    </div>
+    ${extraRow}
+    ${hint?`<div class="inc-hint">${hint}</div>`:''}
+    <div class="inc-result" id="res-${b.id}" style="display:none"></div>
+  </div>`;
+}
+
+function renderIncomeBlocks() {
+  document.getElementById('inc-blocks').innerHTML = incomeBlocks.map(blockHTML).join('');
+  updateIncomeResults();
+}
+
+function updateIncomeResults() {
+  incomeBlocks.forEach(b=>{
+    const el = document.getElementById('res-'+b.id);
+    if (!el) return;
+    const gross = parseFloat(b.gross)||0;
+    const is65  = b.type==='pension' ? (b.is65===true) : (state.age==='70plus');
+    const dm    = parseFloat(b.deductManual)||0;
+    const deduct = calcDeduction(b.type, gross, dm, is65);
+    const income = Math.max(0, gross-deduct);
+    const show = b.gross!==''&&!isNaN(parseFloat(b.gross));
+    if (show) {
+      el.style.display='';
+      el.innerHTML=`所得（概算）：<span>${Math.round(income*10)/10} 万円</span>${b.type==='other'?'（入力値をそのまま使用）':`（控除 ${Math.round(deduct*10)/10} 万円）`}`;
+    } else {
+      el.style.display='none'; el.innerHTML='';
+    }
+  });
+  const tot = totalIncome();
+  const tb = document.getElementById('total-box');
+  const tv = document.getElementById('total-val');
+  if (tot!==null) {
+    tb.style.display='';
+    const r = Math.round(tot*10)/10;
+    const ok = r<=58;
+    tv.className = 'total-val'+(ok?' ok':' ng');
+    tv.textContent = `${r} 万円　${ok?'→ 58万円以下（控除対象の所得範囲内）':'→ 58万円超（一般扶養・配偶者控除の対象外）'}`;
+  } else {
+    tb.style.display='none';
+  }
+}
+
+/* ---- 全クリア ---- */
+function clearAll() {
+  // 本人所得クリア
+  state.selfIncome = null;
+  document.getElementById('self-income').value = '';
+
+  // 本人状況チップクリア
+  state.selfSpecial.clear();
+  document.querySelectorAll('#chips-self-special .chip').forEach(c=>c.classList.remove('sel'));
+
+  // 続柄クリア
+  state.rel = null;
+  document.querySelectorAll('#chips-rel .chip').forEach(c=>c.classList.remove('sel'));
+
+  // 年齢クリア
+  state.age = null;
+  document.querySelectorAll('#chips-age .chip').forEach(c=>{ c.classList.remove('sel','dim'); });
+
+  // 収入クリア（給与1行に戻す）
+  incomeBlocks = [{ id:++blockId, type:'salary', gross:'', deductManual:'', is65:false }];
+
+  // 家族特別事情クリア
+  state.famSpecial.clear();
+  document.querySelectorAll('#chips-special .chip').forEach(c=>c.classList.remove('sel'));
+
+  // 年齢計算ツールクリア
+  const bdateEl = document.getElementById('bdate');
+  if (bdateEl) bdateEl.value = '';
+  const ageEl = document.getElementById('age-result');
+  if (ageEl) ageEl.style.display = 'none';
+
+  updateSelfNote();
+  renderIncomeBlocks();
+  render();
+}
+
+function clearRel() {
+  state.rel = null;
+  document.querySelectorAll('#chips-rel .chip').forEach(c=>c.classList.remove('sel'));
+  // 配偶者解除時は年齢チップのdimも解除
+  document.querySelectorAll('#chips-age .chip').forEach(c=>c.classList.remove('dim'));
+  renderIncomeBlocks(); render();
+}
+function clearAge() {
+  state.age = null;
+  document.querySelectorAll('#chips-age .chip').forEach(c=>c.classList.remove('sel'));
+  renderIncomeBlocks(); render();
+}
+
+/* ---- 本人所得 ---- */
+function onSelfChange(val) {
+  state.selfIncome = val===''?null:parseFloat(val);
+  updateSelfNote(); render();
+}
+function clearSelf() {
+  state.selfIncome = null;
+  document.getElementById('self-income').value='';
+  updateSelfNote(); render();
+}
+function updateSelfNote() {
+  const el = document.getElementById('self-note');
+  const v = state.selfIncome;
+  if (v===null) { el.style.color='var(--text3)'; el.textContent='空欄の場合は1,000万円未満として判定します'; return; }
+  const notes = [];
+  if (v>2350) notes.push('2,350万円超：基礎控除も適用不可');
+  if (v>1000) notes.push('1,000万円超：配偶者控除・配偶者特別控除は適用不可');
+  else if (v>950) notes.push('950万円超〜1,000万円以下：配偶者控除の控除額が減額（最大13万円）');
+  else if (v>900) notes.push('900万円超〜950万円以下：配偶者控除の控除額が減額（最大26万円）');
+  if (v>900) notes.push('900万円超：源泉控除対象配偶者は対象外（源泉徴収計算に反映されない）');
+  if (v>500) notes.push('500万円超：ひとり親控除・寡婦控除は適用不可');
+  if (v>85)  notes.push('85万円超：勤労学生控除は適用不可');
+  if (notes.length===0) {
+    el.style.color='var(--success-text)'; el.textContent='すべての控除の所得要件を満たしています';
+  } else {
+    el.style.color='var(--warning-text)'; el.textContent=notes.join('　／　');
+  }
+}
+
+/* ---- 選択操作 ---- */
+function selOne(type, el) {
+  document.querySelectorAll('#chips-'+type+' .chip').forEach(c=>c.classList.remove('sel'));
+  if (state[type]===el.dataset.val) state[type]=null;
+  else { el.classList.add('sel'); state[type]=el.dataset.val; }
+  updateAgeChips(); renderIncomeBlocks(); render();
+}
+function updateAgeChips() {
+  const ageChips = document.querySelectorAll('#chips-age .chip');
+  if (state.rel==='spouse') {
+    ageChips.forEach(c=>{ c.classList.add('dim'); c.classList.remove('sel'); });
+    state.age=null;
+  } else {
+    ageChips.forEach(c=>c.classList.remove('dim'));
+  }
+}
+function selMulti(target, el) {
+  const v = el.dataset.val;
+  const set = target==='self' ? state.selfSpecial : state.famSpecial;
+  if (set.has(v)) { set.delete(v); el.classList.remove('sel'); }
+  else { set.add(v); el.classList.add('sel'); }
+  render();
+}
+function resetSpecial() {
+  state.famSpecial.clear();
+  document.querySelectorAll('#chips-special .chip').forEach(c=>c.classList.remove('sel'));
+  render();
+}
+function resetSelfSpecial() {
+  state.selfSpecial.clear();
+  document.querySelectorAll('#chips-self-special .chip').forEach(c=>c.classList.remove('sel'));
+  render();
+}
+
+/* ---- matchDeduction ---- */
+function matchDeduction(d, tot) {
+  const r = d.matchRule;
+  if (!r) return false;
+
+  // 本人の状況カード（selfSpecial）の判定
+  if (r.selfSpecial) {
+    return state.selfSpecial.has(r.selfSpecial);
+  }
+
+  // 家族の状況カードの判定
+  if (r.rel    && state.rel!==r.rel)                              return false;
+  if (r.relNot && state.rel===r.relNot)                          return false;
+  if (r.ageIn  && (!state.age||!r.ageIn.includes(state.age)))   return false;
+  if (r.special && !state.famSpecial.has(r.special))             return false;
+  if (r.specialNot) { for (const s of r.specialNot) { if (state.famSpecial.has(s)) return false; } }
+
+  // 配偶者選択時・収入未入力の場合は配偶者控除・配偶者特別控除の両方を表示
+  const isSpouseNoIncome = (state.rel==='spouse' && tot===null);
+  if (isSpouseNoIncome && r.rel==='spouse') return true;
+
+  // 19〜22歳選択時・収入未入力の場合は特定扶養控除・特定親族特別控除の両方を表示
+  const is1922NoIncome = (state.age==='19_22' && tot===null && state.rel!=='spouse');
+  if (is1922NoIncome && r.ageIn && r.ageIn.includes('19_22')) return true;
+
+  if (r.incomeMax!==undefined) {
+    if (tot===null) { if (r.incomeMin!==undefined) return false; }
+    else if (tot>r.incomeMax) return false;
+  }
+  if (r.incomeMin!==undefined) { if (tot===null||tot<=r.incomeMin) return false; }
+  return true;
+}
+
+/* ---- render ---- */
+function render() {
+  const tot  = totalIncome();
+  const self = state.selfIncome;
+  const famHasFilter = state.rel||state.age||state.famSpecial.size>0||incomeBlocks.some(b=>b.gross!==''&&!isNaN(parseFloat(b.gross)));
+  const selfHasFilter = state.selfSpecial.size>0;
+  const hasFilter = famHasFilter || selfHasFilter;
+
+  const countEl   = document.getElementById('result-count');
+  const container = document.getElementById('results');
+
+  // 家族の状況カード（section:'self'を持たないもの）
+  const famMatched = DEDUCTIONS.filter(d=>{
+    if (d.section==='self') return false; // 本人カードは除外
+    if (!matchDeduction(d, tot)) return false;
+    if (self!==null) {
+      // 配偶者控除・配偶者特別控除：職員の所得1,000万円超で除外
+      if (self>1000 && (d.id==='spouse_ctrl'||d.id==='spouse_special')) return false;
+      // 源泉控除対象配偶者：職員の所得900万円超で除外（源泉控除対象配偶者の要件）
+      if (self>900 && d.id==='spouse_gensen') return false;
+    }
+    return true;
+  });
+  // 本人の状況カード（section:'self'を持つもの）
+  const selfMatched = DEDUCTIONS.filter(d=>{
+    if (d.section!=='self') return false;
+    if (!matchDeduction(d, tot)) return false;
+    // 本人所得による除外
+    if (self!==null) {
+      // 基礎控除：合計所得2,350万円超で適用なし
+      if (self>2350 && d.id==='kiso') return false;
+      // 配偶者控除・配偶者特別控除：1,000万円超で適用なし（家族側で制御済みだが念のため）
+      // ひとり親・寡婦：500万円超で適用なし
+      if (self>500 && (d.id==='single_parent'||d.id==='widow')) return false;
+      // 勤労学生：本人の合計所得85万円超で適用なし
+      if (self>85 && d.id==='student') return false;
+    }
+    return true;
+  });
+  // sortIncomeで昇順ソート（収入要件が少ない順）
+  famMatched.sort((a,b) => (a.sortIncome??9999) - (b.sortIncome??9999));
+  selfMatched.sort((a,b) => (a.sortIncome??9999) - (b.sortIncome??9999));
+  const matched = [...famMatched, ...selfMatched];
+
+  if (!hasFilter) {
+    countEl.textContent='';
+    container.innerHTML='<div class="guide">左の条件を選択すると、該当する控除が表示されます。</div>';
+    return;
+  }
+
+  // 案内メッセージ
+  if (famHasFilter && state.rel && state.rel!=='spouse' && !state.age && state.famSpecial.size===0 && !incomeBlocks.some(b=>b.gross!==''&&!isNaN(parseFloat(b.gross)))) {
+    if (!selfHasFilter) {
+      countEl.textContent='';
+      container.innerHTML='<div class="guide">次に「家族の年齢」を選択してください。</div>';
+      return;
+    }
+  }
+  if (self!==null && self>1000 && state.rel==='spouse') {
+    countEl.textContent='';
+    container.innerHTML='<div class="empty">職員の合計所得が1,000万円超のため、<br>配偶者控除・配偶者特別控除は適用対象外です。<br><br>家族に障害がある場合は「障害」チップから選択してください。<br>本人の控除（基礎控除など）は「本人の状況」から確認できます。</div>';
+    return;
+  }
+  if (state.rel==='spouse' && tot!==null && tot>133) {
+    countEl.textContent='';
+    container.innerHTML='<div class="empty">配偶者の合計所得が133万円超（給与収入201.6万円超）のため、<br>配偶者控除・配偶者特別控除ともに適用対象外です。<br><br>特別事情（障害・ひとり親など）がある場合は下のチップから選択してください。</div>';
+    return;
+  }
+
+  const totalCount = famMatched.length + selfMatched.length;
+  countEl.textContent = totalCount>0?`${totalCount}件の控除が該当します`:'';
+  if (!totalCount) {
+    container.innerHTML='<div class="empty">選択した条件では該当する控除がありません。<br>条件を変えてお試しください。</div>';
+    return;
+  }
+
+  const renderCard = (d, tot) => {
+    // 常時表示エリアの生成
+    const isSpouseNoIncome = (state.rel==='spouse' && tot===null);
+    let incomeReqText = d.incomeReq||'';
+    // 配偶者収入未入力時は「収入を入力すると自動で絞り込みます」を追記
+    let spouseHint = '';
+    const is1922NoIncome = (state.age==='19_22' && tot===null && state.rel!=='spouse');
+    if (isSpouseNoIncome && (d.id==='spouse_ctrl'||d.id==='spouse_special')) {
+      spouseHint = `<span style="font-size:11px;color:var(--warning-text);margin-top:2px;display:inline-block">収入を入力すると自動で絞り込みます</span>`;
+    } else if (is1922NoIncome && (d.id==='dep_specific'||d.id==='dep_tokutei')) {
+      spouseHint = `<span style="font-size:11px;color:var(--warning-text);margin-top:2px;display:inline-block">収入を入力すると自動で絞り込みます</span>`;
+    }
+    const visibleHTML = `
+      <div class="card-visible" style="flex-direction:column;align-items:flex-start;gap:2px">
+        ${incomeReqText ? `<span class="cv-amount" style="font-size:12px;font-weight:500;color:var(--text)">${incomeReqText}</span>` : ''}
+        ${d.amountShort ? `<span style="font-size:11px;color:var(--text3)">${d.amountShort}</span>` : ''}
+        ${spouseHint}
+      </div>`;
+
+    return `<div class="card" id="dc-${d.id}" onclick="toggle('${d.id}')">
+      <div class="card-head">
+        <span class="badge ${d.badge}">${d.badgeText}</span>
+        <div class="card-summary">
+          <div class="card-title">
+            ${d.title}${d.isNew?'<span class="new-tag">令和7年新設</span>':''}
+            ${d.note&&d.note.includes('⚠️') ? '<span style="margin-left:8px;font-size:11px;font-weight:500;background:var(--warning-bg);color:var(--warning-text);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">⚠️ 要年末調整申告</span>' : ''}
+            ${d.note&&d.note.startsWith('✅') ? '<span style="margin-left:8px;font-size:11px;font-weight:500;background:var(--success-bg);color:var(--success-text);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">✅ 申告不要</span>' : ''}
+          </div>
+          ${visibleHTML}
+        </div>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="detail">
+        <div style="margin-bottom:8px">
+          ${(d.conditions||[]).map(c=>`<div class="cond-row"><span class="cond-lbl">${c.l}</span><div><span class="cond-val">${c.v}</span>${c.s?`<div class="cond-sub">└ ${c.s}</div>`:''}</div></div>`).join('')}
+        </div>
+        <div class="amt-box">
+          <div class="amt-title">控除額（所得税 / 住民税）</div>
+          <table class="amt-table">${(d.amounts||[]).map(a=>`<tr><th>${a.c}</th><td>${a.a}</td></tr>`).join('')}</table>
+        </div>
+        ${d.note?`<p class="note"><b>注意点：</b>${d.note}</p>`:''}
+      </div>
+    </div>`;
+  };
+
+  // セクション見出しスタイル
+  const secHead = (label, count, style) =>
+    `<div style="font-size:12px;font-weight:700;letter-spacing:0.04em;margin:14px 0 8px;padding:6px 10px;border-radius:var(--radius);${style}">${label}（${count}件）</div>`;
+
+  let html = '';
+  if (famMatched.length > 0) {
+    html += secHead('👨‍👩‍👧 家族の状況', famMatched.length, 'background:var(--info-bg);color:var(--info-text);border-left:3px solid var(--info-border)');
+    html += famMatched.map(d => renderCard(d, tot)).join('');
+  }
+  if (selfMatched.length > 0) {
+    html += secHead('👤 本人の状況', selfMatched.length, 'background:var(--success-bg);color:var(--success-text);border-left:3px solid var(--success-border)');
+    html += selfMatched.map(d => renderCard(d, tot)).join('');
+  }
+  container.innerHTML = html;
+}
+
+function toggle(id) { document.getElementById('dc-'+id)?.classList.toggle('open'); }
+
+/* ---- 年齢計算 ---- */
+function calcAge() {
+  const val = document.getElementById('bdate').value;
+  const el  = document.getElementById('age-result');
+  if (!val) { el.style.display='none'; return; }
+
+  const bdate = new Date(val);
+  // 税法上の年齢判定日は12月31日
+  // 令和8年（2026年）12月31日時点
+  const judgeYear = 2026;
+  const judgeDate = new Date(judgeYear, 11, 31); // 12月31日
+
+  // 誕生日の前日に加齢（年齢計算ニ関スル法律）
+  // 判定: 誕生日の前日がjudgeDate以前なら加齢済み
+  const bMonth = bdate.getMonth();
+  const bDay   = bdate.getDate();
+
+  // judgeYear時点で何歳になっているか
+  let age = judgeYear - bdate.getFullYear();
+  // 誕生日前日が12/31より後ならまだ加齢していない
+  // 誕生日前日 = 誕生月・(誕生日-1)
+  // ただし1日生まれの場合は前月末日
+  const prevDay = new Date(judgeYear, bMonth, bDay - 1);
+  if (prevDay > judgeDate) age--;
+
+  // 年齢グループ判定
+  const groups = [];
+  if (age <= 15)  groups.push('15歳以下（年少扶養親族）');
+  if (age >= 16 && age <= 18) groups.push('16〜18歳（一般扶養控除の対象）');
+  if (age >= 19 && age <= 22) groups.push('19〜22歳（特定扶養親族・特定親族特別控除の対象）');
+  if (age >= 23 && age <= 69) groups.push('23〜69歳（一般扶養控除の対象）');
+  if (age >= 65)  groups.push('65歳以上（年金の公的年金等控除：最低保障110万円）');
+  if (age >= 70)  groups.push('70歳以上（老人扶養親族・老人控除対象配偶者の対象）');
+
+  el.style.display='';
+  el.innerHTML = `<strong>令和8年（${judgeYear}年）12月31日時点で ${age} 歳</strong>
+    ${groups.length>0?`<br><span style="font-size:10px;color:var(--text2)">${groups.join('、')}</span>`:''}`;
+}
+
+/* ---- 初期化 ---- */
+incomeBlocks.push({ id:++blockId, type:'salary', gross:'', deductManual:'', is65:false });
+renderIncomeBlocks();
+render();
+</script>
+</body>
+</html>
