@@ -1,0 +1,19 @@
+' pages/ フォルダのコピー
+    Dim fso2 As Object
+    Set fso2 = CreateObject("Scripting.FileSystemObject")
+    Dim pagesSource As String
+    Dim pagesDev As String
+    Dim pagesProd As String
+    pagesSource = basePath & "\..\assets\pages"
+    pagesDev    = basePath & "\..\dev\pages"
+    pagesProd   = basePath & "\..\prod\pages"
+    If fso2.FolderExists(pagesSource) Then
+        If Not fso2.FolderExists(pagesDev)  Then fso2.CreateFolder pagesDev
+        If Not fso2.FolderExists(pagesProd) Then fso2.CreateFolder pagesProd
+        Dim oFile As Object
+        For Each oFile In fso2.GetFolder(pagesSource).Files
+            fso2.CopyFile oFile.Path, pagesDev  & "\" & oFile.Name, True
+            fso2.CopyFile oFile.Path, pagesProd & "\" & oFile.Name, True
+        Next oFile
+    End If
+    Set fso2 = Nothing
