@@ -1,19 +1,15 @@
-' pages/ フォルダのコピー
-    Dim fso2 As Object
-    Set fso2 = CreateObject("Scripting.FileSystemObject")
-    Dim pagesSource As String
-    Dim pagesDev As String
-    Dim pagesProd As String
-    pagesSource = basePath & "\..\assets\pages"
-    pagesDev    = basePath & "\..\dev\pages"
-    pagesProd   = basePath & "\..\prod\pages"
-    If fso2.FolderExists(pagesSource) Then
-        If Not fso2.FolderExists(pagesDev)  Then fso2.CreateFolder pagesDev
-        If Not fso2.FolderExists(pagesProd) Then fso2.CreateFolder pagesProd
-        Dim oFile As Object
-        For Each oFile In fso2.GetFolder(pagesSource).Files
-            fso2.CopyFile oFile.Path, pagesDev  & "\" & oFile.Name, True
-            fso2.CopyFile oFile.Path, pagesProd & "\" & oFile.Name, True
-        Next oFile
-    End If
-    Set fso2 = Nothing
+Dim figuresSource As String
+Dim figuresDev As String
+Dim figuresProd As String
+figuresSource = basePath & "\..\assets\figures"
+figuresDev    = basePath & "\..\dev\assets\figures"
+figuresProd   = basePath & "\..\prod\assets\figures"
+If fso2.FolderExists(figuresSource) Then
+    If Not fso2.FolderExists(figuresDev)  Then fso2.CreateFolder figuresDev
+    If Not fso2.FolderExists(figuresProd) Then fso2.CreateFolder figuresProd
+    Dim oFile2 As Object
+    For Each oFile2 In fso2.GetFolder(figuresSource).Files
+        fso2.CopyFile oFile2.Path, figuresDev  & "\" & oFile2.Name, True
+        fso2.CopyFile oFile2.Path, figuresProd & "\" & oFile2.Name, True
+    Next oFile2
+End If
