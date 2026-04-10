@@ -1,15 +1,61 @@
-Dim figuresSource As String
-Dim figuresDev As String
-Dim figuresProd As String
-figuresSource = basePath & "\..\assets\figures"
-figuresDev    = basePath & "\..\dev\assets\figures"
-figuresProd   = basePath & "\..\prod\assets\figures"
-If fso2.FolderExists(figuresSource) Then
-    If Not fso2.FolderExists(figuresDev)  Then fso2.CreateFolder figuresDev
-    If Not fso2.FolderExists(figuresProd) Then fso2.CreateFolder figuresProd
-    Dim oFile2 As Object
-    For Each oFile2 In fso2.GetFolder(figuresSource).Files
-        fso2.CopyFile oFile2.Path, figuresDev  & "\" & oFile2.Name, True
-        fso2.CopyFile oFile2.Path, figuresProd & "\" & oFile2.Name, True
-    Next oFile2
-End If
+function buildLinkList(rows, blk) {
+    if (rows.length === 0) return null;
+    if (blk && blk.style_variant === 'table') {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-block';
+      const div = document.createElement('div');
+      div.className = 'table-wrap';
+      const table = document.createElement('table');
+      table.className = 'data-table';
+      const thead = document.createElement('thead');
+      const hrow = document.createElement('tr');
+      ['リンク名', '説明', ''].forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        hrow.appendChild(th);
+      });
+      thead.appendChild(hrow);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        const td1 = document.createElement('td');
+        td1.textContent = r.title || '';
+        const td2 = document.createElement('td');
+        td2.textContent = r.short_note || '';
+        const td3 = document.createElement('td');
+        if (r.url) {
+          const a = document.createElement('a');
+          a.href = esc(r.url);
+          a.target = '_blank';
+          a.textContent = '開く';
+          td3.appendChild(a);
+        }
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      div.appendChild(table);
+      wrap.appendChild(div);
+      return wrap;
+    }
+    const ul = document.createElement('ul');
+    ul.style.cssText = 'padding:8px 0;';
+    for (const r of rows) {
+      const li = document.createElement('li');
+      li.style.cssText = 'margin-bottom:6px;';
+      if (r.url) {
+        const a = document.createElement('a');
+        a.href = esc(r.url);
+        a.target = '_blank';
+        a.textContent = r.title || r.label || r.url;
+        li.appendChild(a);
+      } else {
+        li.textContent = r.title || r.label || '';
+      }
+      ul.appendChild(li);
+    }
+    return ul;
+  }
