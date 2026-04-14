@@ -1,298 +1,36 @@
-# 指示書（統合・改訂版）
+① 資料検索時間の削減
+	•	1回あたり：3分短縮
+	•	1日：5回
+	•	対象者：14人
+	•	月20営業日
 
-## 目的
-- 認定側が「安全に初動対応できる」ように、タブ/アコーディオン/FAQ検索で情報を即参照できるツールを作る。
-- 表示は **1つのエントリHTML（`index.html`）** を起点に利用できること。
-- CSS/JS/データは別ファイルとして分離する。
-- 元データは **Excel＋図（画像）** の2種類。
-- 図（画像）はファイルとして管理し、**画像のファイルパスはExcel側で管理**する。
-- 本文 `body` は **純テキスト**（HTMLとして解釈しない）。
-- ツールは **ローカルで開いて動作**すること（file:// 利用を想定）。  
-  そのため、実行時に `fetch(data.json)` のような読み込み方式は避ける（ブラウザ制約回避）。
-- データ読込は **ビルド時に Excel→JSデータ（`data.js`）へ変換**し、ブラウザは `<script src="data.js">` で読み込む。
-- 想定利用環境：セキュリティ制限下の社内PC（Windows想定）、python非対応、バッチファイル非対応、PowerShell制限のため使用不可、Edge/Chrome。IE非対応。
+月間削減　3分 × 5回 × 14人 × 20日= 4,200分 = 70時間/月
 
----
+② 「思い出す・確認する」時間の削減
+	•	1回あたり：2分短縮
+	•	1日：5回
+	•	対象者：14人
+	•	月20営業日
 
-## 全体構成（ファイル）
-
-- README：`README.md`
-  - README構成（最低限これ）
-    1. このExcelの目的  
-    2. 全体構造（骨組み／中身／制御） 
-    3. シート一覧と役割 
-    4. キー列一覧（何が何と繋がるか） 
-    5. 表示の流れ  
-    6. よくある更新と編集箇所  
-    7. やってはいけないこと  
-    8. 公開手順  
-    9. トラブル時の確認ポイント  
-    10. 変更履歴の付け方
-  - （READMEに必ず書く）
-    - HTMLは原則直接編集しない（編集するなら `dev/` 側のみ、`prod/` は生成物）。
-    - `visible=no` の意味、参照整合性チェック、画像欠落時の扱い。
-
-- 元データ（Excel）：`data/data.xlsx`
-     - 複数シートで管理（内容・文言・ルール・表示定義）
-     - 全シートはテーブル形式（1行目ヘッダ、以降1行1レコード）で統一
-     - 列は「列名参照」で実装（列順依存しない）
-
-- 図（画像）：`assets/figures/`（PNG/JPG/SVG）
-      - Excelには `assets/figures/...` のように **相対パス**で登録
-
-- バッチ①：元データ→作業用へ反映：`scripts/update_dev.(bat|ps1|sh)`
-     - `data.xlsx` と `assets/figures/` を、作業用が参照する形に更新（変換・コピー等）
-     - Excel→`dev/data.js`（`window.__DATA__=...`）を生成
-     - チェックを実施
-    - 参照整合性（存在しないID参照の検出）
-    - 重複ID検出
-    - 画像パス実在チェック
-    - `visible` 値妥当性（yes/noのみ）
-
-- 作業用：`dev/`
-     - `dev/index.html`（編集・動作確認用）
-     - `dev/app.js`
-     - `dev/styles.css`
-     - `dev/data.js`（ビルド生成物）
-
-- バッチ②：作業用→本番へ反映：`scripts/deploy_prod.(bat|ps1|sh)`
-     - `dev/` の必要ファイルを `prod/` にコピー/差し替え
-
-- 本番：`prod/`
-     - `prod/index.html`（利用者が見るエントリ）
-     - `prod/app.js`
-     - `prod/styles.css`
-     - `prod/data.js`（ビルド生成物）
-     - ※画像は `assets/figures/` を同梱
+月間削減　2分 × 5回 × 14人 × 20日= 2,800分 = 46.6時間/月
 
 
-- 依存の明記：実装側で確定させる
-     - `update_dev` 実行に必要なランタイム（Node.js or Python等）をREADMEに固定し、セットアップ手順（`npm ci` / `pip install ...` 等）を書く
+③ 教育・再教育コスト削減（•	同じ質問の再説明	•	横からの確認対応	•	「これどうするんでしたっけ？」対応）
+	•	新人/苦手者への個別説明：月8時間
+	•	ツール導入後：月3時間
+	•	差分：5時間/月
+	仮に2か月間、2人とすると、5時間×2×2= 20時間/年　年！注意
 
+④ 詰まり・相談・保留の削減
+例
+	•	1件あたり：3分短縮
+	•	1日：5件
+	•	対象者：14人
+	•	月20営業日
 
+月間削減　3分 × 5件 × 14人 × 20日= 4,200分 = 70時間/月
 
----
-
-## 設計の柱（守るべきルール）
-- **同じ内容は1か所だけ**に置く（二重管理しない）
-- **役割分離**（表示/UI、文言、コンテンツ、判断、計算は分ける）
-- **共通キーで関連付け**：`topic_id` を参照キーとして使う
-- **安全設計**：元データは削除せず `visible=no` で非表示（後で戻せる）
-- **更新箇所が追える**：READMEに「何を変えるならどこ」を明記する
-- **本文は純テキスト**（XSS対策としてHTML解釈しない）
-- 改行は `<br>` 変換などで表示整形する
-
----
-
-## キー設計（必須）
-- `topic_id`：コンテンツのID（FAQ1件、書類1件、基準項目1件など）
-  - ルール：英小文字＋アンダースコアのみ（例：`commute_route_change`）
-- `category_id`：大分類（左の縦タブ）
-- `section_id`：セクション（右上の横タブ）
-  - 業務カテゴリ＋共通固定タブ＋FAQ検索タブ
-  - ※FAQ検索は `category_id=common` で実現
-  - 例：`criteria_overview`、`attachments_list`、`faq_selected`、`faq_search`
-
----
-
-## 画面構造（見た目の前提）
-- **左**：大分類タブ（category）
-  - 通常業務カテゴリ（通勤/扶養…）
-  - 共通固定タブ（基本トーク、主管課一覧、電話番号一覧、宣言）
-  - FAQ検索タブ（`common`）
-- **右上**：セクションタブ（section）
-  - 業務カテゴリ：認定基準概要/シーン別/添付書類/FAQ など
-  - `common`（FAQ検索）：`faq_search` を表示
-- **右下**：内容表示（Excel由来データから描画）
-- アコーディオン：開閉、全開/全閉（初動対応向け）
-- FAQ検索：大文字小文字/全半角の差異を吸収（最低限lowercase正規化）
-- 印刷CSS
-
----
-
-## Excelブック構成（確定：役割別シート）
-
-### 1) マスタ（構造定義）
-- `category_master`：左タブ（大分類）定義
-- `section_master`：右上タブ（セクション）定義
-- `section_blocks`：カテゴリ×セクションに、どの表示部品をどの順で置くか
-
-**`section_blocks` 必須列（例）**
-- `category_id`（または `*` で共通）
-- `section_id`
-- `block_id`（ユニークID）
-- `block_type`
-- `order`
-- `source_type`
-- `source_ref`
-- `visible`（yes/no）
-
-### 2) コンテンツ（実データ）
-- `content`：**1行=1コンテンツ**（詳細表示の最小単位）
-
-### 3) 紐づけ（カテゴリ別FAQのデフォルト表示）
-- `faq_map`：カテゴリ別FAQの表示対象（`category_id` → `faq_topic_id`）
-
-### 4) 文言・テンプレ
-- `messages`：共通文言（注意文、共通ラベル、定型説明）
-- `templates`：トーク/メール等のテンプレ
-
-### 5) 判断・エスカレ（運用ルール）
-- `requirements`：要件・条件（制度/業務ルール）
-- `escalation`：エスカレーション基準・連絡先・引き継ぎ要件
-
-### 6) ロジック（必要なら）
-- `calc_logic`：数値計算系
-- `decision_logic`：判定・分岐系（暫定：金額→OK/NG）
-
-### 7) 表示挙動（挙動の指定）
-- `view_settings`：表示形式の指定（`view_type`、`badge`、`severity`、`icon_key`、`level`、`group_id` 等）
-- `ui_settings`：初期表示など全体設定（デフォルトカテゴリ、デフォルトセクション等）
-- `assets_map`：画像・リンク参照（`asset_id`、`figure_path`、`caption`、`alt`、`url` 等）
-- `flow`：フロー図参照（`flow_id`、関連topic_id、`asset_id`、補足文 等）
-- 画像実体は `assets_map` に集約し、`content` は `asset_id`（または `asset_ids`）で参照する
-
----
-
-## category_master（例：左タブ）
-### 業務カテゴリ
-- `kyuyo`（給与口座の届出）
-- `jukyo`（住居届）
-- `tsukin`（通勤届）
-- `fuyo`（扶養親族等（異動）届）
-- `jido`（児童手当（認定・改定））
-- `genkyo`（現況届）
-- `year_end_adjustment`（年末調整）
-- `hifuku`（被服貸与）
-
-### 共通固定タブ
-- `talk_script_basic`
-- `office_list`
-- `phone_list`
-- `slogan`
-
-### FAQ検索
-- `common`（FAQ検索タブ）
-
----
-
-## section_master（例：右上タブ）
-### 業務カテゴリ用
-- `criteria_overview`
-- `scenarios`
-- `attachments_list`
-- `attachments_examples`
-- `faq_selected`
-
-### common用
-- `faq_search`（`category_id=common` のときに表示）
-
----
-
-## section_blocks（表示部品）
-- `block_type` 候補：
-  - text / table / cards / faq_list / image / image_gallery / notice / decision_tool / link_list
-- レイアウト指定：
-  - `layout_width`：full / half / third
-  - `row_group`：同じ行に並べたいものをまとめる
-  - `align`（任意）：top / center / stretch
-  - `style_variant`（任意）：見た目差分
-  - 各blockは `source_type` と `source_ref` を持つ
-  - 例：`source_type=content_query`
-    - `source_ref=category_id=tsukin;section_id=scenarios;visible=yes`
-  - 例：`source_type=topic_ids`
-    - `source_ref=commute_route_change|commute_fare_update`
-  - 例：`source_type=message_key`
-    - `source_ref=common_warning_001`
-  - 例：`source_type=rule_id`（decision_tool）
-    - `source_ref=amount_rule_001`
-
----
-
-## content シート（最重要）推奨列
-
-### 最低限（必須級）
-- `topic_id`（必須、ユニーク）
-- `content_type`（必須：`faq` / `criteria` / `attachment` / `notice` / `template` 等）
-- `category_id`（必須）
-- `section_id`（必須。共通なら `*` 可）
-- `title`
-- `body`（純テキスト）
-- `display_order`
-- `keywords`
-- `visible`（yes/no）
-
-### ドメイン列（必要なものだけ）
-- `doc_name`
-- `short_note`
-- `notice_type`（warning/info/urgent 等）
-- `priority`
-- `related_topics`
-- `default_topics`
-- `show_in_global`
-- `asset_id` / `asset_ids`（画像参照。実体は `assets_map`）
-
-### 運用列
-- `updated_at`（YYYY-MM-DD）
-- `updated_by`
-- `change_reason`
-- `badge_text`
-- `badge_until`（YYYY-MM-DD）
-
----
-
-## FAQの扱い（デフォルト表示と検索）
-- `faq_selected`：各業務カテゴリで「そのカテゴリに紐づくFAQ」を表示
-  - 紐づけは `faq_map`（`category_id` → `faq_topic_id`）
-- `faq_search`：`category_id=common` のセクションとして「FAQ検索」を提供
-  - 検索対象は **`content_type=faq` のみ**
-  - かつ `visible=yes` のみ
-
----
-
-## decision_tool（暫定仕様：未定を許容）
-- いったんは「金額 → OK/NG」想定。将来拡張できるよう、ロジックは `decision_logic` に分離して定義する。
-
-・`decision_logic` 最小列（暫定案）
-- `rule_id`（ユニーク）
-- `input_type`（例：`amount`）
-- `operator`（例：`<=`）
-- `threshold`（数値）
-- `ok_message_key`（messages参照）
-- `ng_message_key`（messages参照）
-- `visible`（yes/no）
-
----
-
-## 更新ルール（何を変えるならどこ）
-- 左タブ追加/名称変更 → `category_master`
-- 右上タブ追加/名称変更 → `section_master`
-- 本文追加・修正 → `content`
-- カテゴリにデフォルト表示するFAQ増減 → `faq_map`
-- 共通注意文・定型ラベル → `messages`
-- トーク/メール文面 → `templates`
-- 判定条件 → `decision_logic`
-- 計算式 → `calc_logic`
-- エスカレ基準等 → `escalation`
-- 画像差し替え → `assets/figures/` 差し替え（必要なら `assets_map` 更新）
-- 一時的に画面から消す → 行削除ではなく `visible=no`
-
----
-
-## データ入力ルール（最低限）
-- IDは **英小文字＋アンダースコア**（スペース禁止）
-- `topic_id` は参照キーとして表記ゆれ禁止
-- 画像パスは相対パス（`assets/figures/...`）
-- `visible=no` は削除ではない
-- `body` は純テキスト（HTML禁止）
-- 日付は `YYYY-MM-DD` で統一
-
----
-
-## 実行/ビルド/依存手順（運用）
-- ① Excelを更新：`data/data.xlsx` を編集（画像があれば `assets/figures/` も更新）
-- ② 作業用へ反映：`scripts/update_dev.(bat|ps1|sh)` を実行
-  - Excel→`dev/data.js` 生成
-  - `dev/index.html` を開いて確認
-- ③ 本番へ反映：`scripts/deploy_prod.(bat|ps1|sh)` を実行
-  - `prod/` を更新して公開
+合計削減見込み
+186.6×12か月= 2239.2時間/年
+→＋ 20時間 = 2259.2時間/年の削減
+1FTE:1920時間として、**1.18FTE削減を見込んでいる。**
