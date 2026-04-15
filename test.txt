@@ -1,16 +1,22 @@
-Sub ExportDataJs()
-
-' dev → prod ファイルコピー
-    Dim fso3 As Object
+Sub CopyDevToProd()
+    Dim wb As Workbook
+    Dim basePath As String
+    Dim fso As Object
     Dim devFolder As String
     Dim prodFolder As String
-    Set fso3 = CreateObject("Scripting.FileSystemObject")
+
+    Set wb = ThisWorkbook
+    basePath = wb.Path
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
     devFolder  = basePath & "\..\dev"
     prodFolder = basePath & "\..\prod"
-    If Not fso3.FolderExists(prodFolder) Then fso3.CreateFolder prodFolder
-    fso3.CopyFile devFolder & "\app.js",     prodFolder & "\app.js",     True
-    fso3.CopyFile devFolder & "\styles.css", prodFolder & "\styles.css", True
-    fso3.CopyFile devFolder & "\index.html", prodFolder & "\index.html", True
-    Set fso3 = Nothing
 
+    If Not fso.FolderExists(prodFolder) Then fso.CreateFolder prodFolder
+    fso.CopyFile devFolder & "\app.js",     prodFolder & "\app.js",     True
+    fso.CopyFile devFolder & "\styles.css", prodFolder & "\styles.css", True
+    fso.CopyFile devFolder & "\index.html", prodFolder & "\index.html", True
+
+    Set fso = Nothing
+    MsgBox "[完了] dev から prod にコピーしました。", vbInformation, "CopyDevToProd"
 End Sub
