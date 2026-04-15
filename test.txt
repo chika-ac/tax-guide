@@ -1,22 +1,37 @@
-Sub CopyDevToProd()
-    Dim wb As Workbook
-    Dim basePath As String
-    Dim fso As Object
-    Dim devFolder As String
-    Dim prodFolder As String
+.admin-trigger {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 12px;
+  height: 12px;
+  background: transparent;  ← 削除
+  cursor: pointer;
+  z-index: 50;
+}
 
-    Set wb = ThisWorkbook
-    basePath = wb.Path
 
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    devFolder  = basePath & "\..\dev"
-    prodFolder = basePath & "\..\prod"
 
-    If Not fso.FolderExists(prodFolder) Then fso.CreateFolder prodFolder
-    fso.CopyFile devFolder & "\app.js",     prodFolder & "\app.js",     True
-    fso.CopyFile devFolder & "\styles.css", prodFolder & "\styles.css", True
-    fso.CopyFile devFolder & "\index.html", prodFolder & "\index.html", True
+<div class="admin-trigger" id="adminTrigger" title="管理者メニュー">⚙</div>
 
-    Set fso = Nothing
-    MsgBox "[完了] dev から prod にコピーしました。", vbInformation, "CopyDevToProd"
-End Sub
+
+
+.admin-trigger {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  font-size: 18px;
+  color: #ccc;
+  cursor: pointer;
+  z-index: 50;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.admin-trigger:hover {
+  opacity: 1;
+}
+
+
+document.getElementById("adminTrigger").addEventListener("click", function() {
+  openModal();
+});
+
