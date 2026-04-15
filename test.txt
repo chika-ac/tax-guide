@@ -1,37 +1,23 @@
-.admin-trigger {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 12px;
-  height: 12px;
-  background: transparent;  ← 削除
-  cursor: pointer;
-  z-index: 50;
+function runLinkCheck() {
+  const allApps = [...regularApps, ...eventApps, ...internalApps];
+  const container = document.getElementById("checkResults");
+  container.innerHTML = "";
+
+  allApps.forEach(app => {
+    const item = document.createElement("div");
+    item.className = "check-item";
+    item.innerHTML = `
+      <span style="font-size:13px;flex:1;">${app.name}</span>
+      <a href="${app.url}" target="_blank" style="font-size:12px;color:var(--accent);">開いて確認 →</a>
+    `;
+    container.appendChild(item);
+  });
+
+  const summary = document.createElement("p");
+  summary.style.cssText = "font-size:13px;margin-top:1rem;color:var(--muted);";
+  summary.textContent = "各リンクを開いて到達できるか確認してください。";
+  container.appendChild(summary);
 }
 
 
-
-<div class="admin-trigger" id="adminTrigger" title="管理者メニュー">⚙</div>
-
-
-
-.admin-trigger {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  font-size: 18px;
-  color: #ccc;
-  cursor: pointer;
-  z-index: 50;
-  opacity: 0.4;
-  transition: opacity 0.2s;
-}
-.admin-trigger:hover {
-  opacity: 1;
-}
-
-
-document.getElementById("adminTrigger").addEventListener("click", function() {
-  openModal();
-});
-
+<button class="btn-check" id="runCheckBtn" onclick="runLinkCheck()">リンク一覧を表示</button>
