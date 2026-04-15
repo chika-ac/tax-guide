@@ -1,36 +1,16 @@
-① 資料検索時間の削減
-	•	1回あたり：3分短縮
-	•	1日：5回
-	•	対象者：14人
-	•	月20営業日
+Sub ExportDataJs()
 
-月間削減　3分 × 5回 × 14人 × 20日= 4,200分 = 70時間/月
+' dev → prod ファイルコピー
+    Dim fso3 As Object
+    Dim devFolder As String
+    Dim prodFolder As String
+    Set fso3 = CreateObject("Scripting.FileSystemObject")
+    devFolder  = basePath & "\..\dev"
+    prodFolder = basePath & "\..\prod"
+    If Not fso3.FolderExists(prodFolder) Then fso3.CreateFolder prodFolder
+    fso3.CopyFile devFolder & "\app.js",     prodFolder & "\app.js",     True
+    fso3.CopyFile devFolder & "\styles.css", prodFolder & "\styles.css", True
+    fso3.CopyFile devFolder & "\index.html", prodFolder & "\index.html", True
+    Set fso3 = Nothing
 
-② 「思い出す・確認する」時間の削減
-	•	1回あたり：2分短縮
-	•	1日：5回
-	•	対象者：14人
-	•	月20営業日
-
-月間削減　2分 × 5回 × 14人 × 20日= 2,800分 = 46.6時間/月
-
-
-③ 教育・再教育コスト削減（•	同じ質問の再説明	•	横からの確認対応	•	「これどうするんでしたっけ？」対応）
-	•	新人/苦手者への個別説明：月8時間
-	•	ツール導入後：月3時間
-	•	差分：5時間/月
-	仮に2か月間、2人とすると、5時間×2×2= 20時間/年　年！注意
-
-④ 詰まり・相談・保留の削減
-例
-	•	1件あたり：3分短縮
-	•	1日：5件
-	•	対象者：14人
-	•	月20営業日
-
-月間削減　3分 × 5件 × 14人 × 20日= 4,200分 = 70時間/月
-
-合計削減見込み
-186.6×12か月= 2239.2時間/年
-→＋ 20時間 = 2259.2時間/年の削減
-1FTE:1920時間として、**1.18FTE削減を見込んでいる。**
+End Sub
