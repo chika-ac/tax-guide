@@ -27,12 +27,12 @@ Sub RangeToImage()
         Exit Sub
     End If
 
-    ' 選択範囲をコピー
-    rng.CopyPicture Appearance:=xlScreen, Format:=xlPicture
-
-    ' 一時グラフを作成して貼り付け
+    ' 先に一時グラフを作成
     Set chtObj = ActiveSheet.ChartObjects.Add(0, 0, rng.Width, rng.Height)
     Set cht = chtObj.Chart
+
+    ' グラフ作成後に選択範囲をコピーしてすぐ貼り付け
+    rng.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
     With cht
         .Paste
