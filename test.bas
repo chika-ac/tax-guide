@@ -7,12 +7,9 @@ Sub RangeToImage()
     Const FILE_NAME   As String = "output.png"                    ' ファイル名
     ' =============================================
 
-    Dim rng         As Range
-    Dim tmpSheet    As Worksheet
-    Dim shp         As Shape
-    Dim chtObj      As ChartObject
-    Dim cht         As Chart
-    Dim savePath    As String
+    Dim rng      As Range
+    Dim chtSheet As Chart
+    Dim savePath As String
 
     ' 選択範囲の確認
     If TypeName(Selection) <> "Range" Then
@@ -29,28 +26,21 @@ Sub RangeToImage()
         Exit Sub
     End If
 
+    Application.ScreenUpdating = False
+
     ' 選択範囲をコピー
     rng.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
-    ' 一時シートを追加して貼り付け
-    Application.ScreenUpdating = False
-    Set tmpSheet = Worksheets.Add
+    ' グラフシートを追加して貼り付け・エクスポート
+    Set chtSheet = Charts.Add
+    chtSheet.Paste
+    chtSheet.Export Filename:=savePath, FilterName:="PNG"
 
-    tmpSheet.Paste
-
-    ' 貼り付けた図をグラフ経由でエクスポート
-    Set shp = tmpSheet.Shapes(tmpSheet.Shapes.Count)
-    shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
-
-    Set chtObj = tmpSheet.ChartObjects.Add(0, 0, shp.Width, shp.Height)
-    Set cht = chtObj.Chart
-    cht.Paste
-    cht.Export Filename:=savePath, FilterName:="PNG"
-
-    ' 一時シートを削除
+    ' グラフシートを削除
     Application.DisplayAlerts = False
-    tmpSheet.Delete
+    chtSheet.Delete
     Application.DisplayAlerts = True
+
     Application.ScreenUpdating = True
 
     MsgBox "保存しました。" & vbCrLf & savePath, vbInformation
