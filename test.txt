@@ -1,44 +1,31 @@
-① HTMLの morningLinks のクラスを変更
-消す：
-html<div id="morningLinks" class="morning-links"></div>
-追加：
-html<div id="morningLinks" class="app-grid"></div>
+1. CSS（107〜121行目）— .morning-links 関連スタイル3ブロックをすべて削除
 
-② JS の buildMorningLinks 関数を丸ごと置き換え
-消す（この関数全体）：
-js(function buildMorningLinks() {
-  const container = document.getElementById("morningLinks");
-  morningFiles.forEach((f, i) => {
-    if (i > 0) {
-      const sep = document.createElement("span");
-      sep.className = "morning-sep";
-      sep.textContent = "・";
-      container.appendChild(sep);
-    }
-    const a = document.createElement("a");
-    a.href = f.url;
-    a.textContent = f.team + f.label;
-    container.appendChild(a);
-  });
-})();
-追加：
-js(function buildMorningLinks() {
-  const container = document.getElementById("morningLinks");
-  morningFiles.forEach(f => {
-    const a = document.createElement("a");
-    a.href = f.url;
-    a.className = "app-card event-card";
-    a.innerHTML = `
-      <div class="app-icon">${calIcon}</div>
-      <span class="app-name">${f.team}${f.label}</span>
-    `;
-    container.appendChild(a);
-  });
-})();
 
-③ CSSの .morning-links 関連を削除
-消す（このブロック全体）：
-css.morning-links { ... }
+.morning-links { ... }
 .morning-links a { ... }
-.morning-sep { ... }
-これで朝礼リンクがアンバー系のカードボタンになります。
+.morning-sep { color: #ccc; margin: 0 4px; }
+2. HTML（285行目）— morningLinks の div を削除
+
+
+<div id="morningLinks" class="morning-links"></div>
+3. JS（335〜338行目）— morningFiles 配列を削除
+
+
+const morningFiles = [ ... ];
+4. JS（389〜403行目）— buildMorningLinks 関数全体を削除
+
+
+(function buildMorningLinks() { ... })();
+追加箇所
+1. JS — regularApps の直前に新しい配列を追加
+
+内容：infoApps という配列を作り、以下の2項目を入れる
+{ name: "お知らせ", url: "apps/oshirase.html" }
+{ name: "センター稼働状況", url: "apps/center_status.html" } ※ ファイル名は実際のものに合わせて変更してください
+2. HTML — 定常業務 <section> の直前に新セクションを追加
+
+section-label（見出し）なし
+グリッドのコンテナ id="infoApps" を持つ <div class="app-grid"> を持つ <section class="section">
+3. JS — buildCards の呼び出しに1行追加
+
+buildCards(infoApps, "infoApps", false); を buildCards(regularApps, ...) の前に追加
