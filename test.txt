@@ -1,31 +1,5 @@
-1. CSS（107〜121行目）— .morning-links 関連スタイル3ブロックをすべて削除
-
-
-.morning-links { ... }
-.morning-links a { ... }
-.morning-sep { color: #ccc; margin: 0 4px; }
-2. HTML（285行目）— morningLinks の div を削除
-
-
-<div id="morningLinks" class="morning-links"></div>
-3. JS（335〜338行目）— morningFiles 配列を削除
-
-
-const morningFiles = [ ... ];
-4. JS（389〜403行目）— buildMorningLinks 関数全体を削除
-
-
-(function buildMorningLinks() { ... })();
-追加箇所
-1. JS — regularApps の直前に新しい配列を追加
-
-内容：infoApps という配列を作り、以下の2項目を入れる
-{ name: "お知らせ", url: "apps/oshirase.html" }
-{ name: "センター稼働状況", url: "apps/center_status.html" } ※ ファイル名は実際のものに合わせて変更してください
-2. HTML — 定常業務 <section> の直前に新セクションを追加
-
-section-label（見出し）なし
-グリッドのコンテナ id="infoApps" を持つ <div class="app-grid"> を持つ <section class="section">
-3. JS — buildCards の呼び出しに1行追加
-
-buildCards(infoApps, "infoApps", false); を buildCards(regularApps, ...) の前に追加
+a.href = app.url;
+a.onclick = function(e) {
+  e.preventDefault();
+  window.open(app.url);
+};
