@@ -92,6 +92,10 @@
   <span class="fl">📁 データフォルダ:</span>
   <span id="folderStatus"><span class="badge-none">未接続</span></span>
   <button class="btn-sm" id="folderBtn" onclick="folderAction()">フォルダを選択</button>
+  <label class="btn-sm" style="cursor:pointer;" title="フォルダ選択が使えない場合の代替方法">
+    📂 代替：ファイルを選択
+    <input type="file" id="altFolderInput" webkitdirectory accept=".json" style="display:none" onchange="loadFromFileInput(this.files)">
+  </label>
 </div>
 
 <main>
@@ -118,8 +122,13 @@ document.getElementById('headerDate').textContent = fmtDateJP(todayStr);
 (async () => {
   await tryRestoreFolder();
   if (!dataFolderHandle) {
-    // Edgeなどfetchが有効な環境向けフォールバック
-    await loadAllData();
+    const cached = loadCacheLS();
+    if (cached.length > 0) {
+      renderFromCache(cached);
+    } else {
+      // fetchフォールバック
+      await loadAllData();
+    }
   }
 })();
 
@@ -359,6 +368,55 @@ function toggleHistory(dateStr) {
   const open   = body.classList.toggle('open');
   toggle.textContent = open ? '▲' : '▼';
   if (open) body.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ===== localStorage キャッシュ =====
+function saveCacheLS(files) {
+  try { localStorage.setItem('fileCache_index', JSON.stringify(files)); }
+  catch(e) { console.warn('cache save:', e); }
+}
+function loadCacheLS() {
+  try { const r = localStorage.getItem('fileCache_index'); return r ? JSON.parse(r) : []; }
+  catch { return []; }
+}
+
+// ===== キャッシュ・代替モード共通の描画 =====
+function renderFromCache(results) {
+  const todayFile = results.find(r => r.name === todayStr + '.json');
+  renderTodaySection(todayFile ? todayFile.data : null);
+  const hist = results
+    .filter(r => /^\d{4}-\d{2}-\d{2}\.json$/.test(r.name) && r.name !== todayStr + '.json')
+    .sort((a, b) => b.name.localeCompare(a.name))
+    .slice(0, 30);
+  const histEl = document.getElementById('historyList');
+  if (!hist.length) {
+    histEl.innerHTML = '<div class="loading" style="color:#aaa;">過去の周知データはありません</div>';
+  } else {
+    histEl.innerHTML = hist.map(r => renderHistoryItem(r.name.replace('.json',''), r.data)).join('');
+  }
+  const st = document.getElementById('folderStatus');
+  st.innerHTML = '<span class="badge-connected">✓ キャッシュ読み込み済み（' + results.length + '件）</span>';
+}
+
+// ===== 代替：webkitdirectory でフォルダ内ファイルを一括読み込み =====
+function loadFromFileInput(files) {
+  const readers = [];
+  for (const file of files) {
+    if (!file.name.endsWith('.json')) continue;
+    readers.push(new Promise(resolve => {
+      const r = new FileReader();
+      r.onload = e => {
+        try { resolve({ name: file.name, data: JSON.parse(e.target.result) }); }
+        catch { resolve(null); }
+      };
+      r.readAsText(file, 'UTF-8');
+    }));
+  }
+  Promise.all(readers).then(results => {
+    const valid = results.filter(Boolean);
+    saveCacheLS(valid);
+    renderFromCache(valid);
+  });
 }
 
 // ===== ユーティリティ =====
