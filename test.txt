@@ -1,1 +1,1 @@
-window.showDirectoryPicker({ mode: 'readwrite' }).then(h => console.log('成功:', h.name)).catch(e => console.error('失敗:', e.name, e.message))
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --allow-file-access-from-files "file:////YH-23/share/へ/99/ポータル.html"
