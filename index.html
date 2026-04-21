@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>朝礼周知</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Meiryo UI', Meiryo, 'Yu Gothic UI', sans-serif; background: #f4f6fb; color: #222; min-height: 100vh; }
+
+  header { background: #1a3a6b; color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
+  header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.05em; }
+  header .today-date { font-size: 1rem; opacity: 0.85; }
+  header a { color: #9db8f0; font-size: 0.82rem; text-decoration: none; margin-left: auto; }
+  header a:hover { text-decoration: underline; }
+
+  /* フォルダバー */
+  .folder-bar { background: #fff; border-bottom: 2px solid #e0e8f8; padding: 8px 24px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.82rem; }
+  .folder-bar .fl { color: #666; }
+  .badge-connected  { background:#e6f7f1; color:#1d7a5a; border:1px solid #a8dfc8; border-radius:5px; padding:3px 10px; font-weight:700; }
+  .badge-reconnect  { background:#fff8e6; color:#8a5700; border:1px solid #f0d080; border-radius:5px; padding:3px 10px; font-weight:700; }
+  .badge-none       { color:#999; }
+  .btn-sm { padding: 4px 10px; border: none; border-radius: 5px; font-size: 0.8rem; font-family: inherit; cursor: pointer; font-weight: 600; background: #e8eef8; color: #1a3a6b; }
+  .btn-sm:hover { opacity: 0.82; }
+
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  .section-title { font-size: 1.05rem; font-weight: 700; color: #1a3a6b; margin-bottom: 14px; padding-left: 8px; border-left: 4px solid #3a6fd8; }
+
+  /* 今日 */
+  .today-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .today-badge { background: #3a6fd8; color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 12px; }
+  .today-date-label { font-size: 1.15rem; font-weight: 700; color: #1a3a6b; }
+
+  .common-card { background: #fff; border-radius: 10px; border: 1.5px solid #c8d8f8; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(58,111,216,0.07); }
+  .common-card h3 { font-size: 0.85rem; color: #3a6fd8; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .common-card ul { list-style: none; padding: 0; }
+  .common-card li { padding: 5px 0 5px 16px; border-bottom: 1px solid #eef2fb; font-size: 0.95rem; position: relative; }
+  .common-card li:last-child { border-bottom: none; }
+  .common-card li::before { content: '▸'; position: absolute; left: 0; color: #3a6fd8; font-size: 0.75rem; top: 7px; }
+
+  .teams-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 8px; }
+  .team-card { background: #fff; border-radius: 10px; border-top: 4px solid var(--tc); border-left: 1px solid #e0e6f0; border-right: 1px solid #e0e6f0; border-bottom: 1px solid #e0e6f0; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+  .team-card h3 { font-size: 0.88rem; font-weight: 700; color: var(--tc); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .team-card h3::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tc); flex-shrink: 0; }
+  .team-card ul { list-style: none; padding: 0; }
+  .team-card li { padding: 4px 0 4px 14px; border-bottom: 1px solid #f0f2f8; font-size: 0.9rem; position: relative; }
+  .team-card li:last-child { border-bottom: none; }
+  .team-card li::before { content: '–'; position: absolute; left: 0; color: var(--tc); }
+  .team-card .no-items { color: #aaa; font-size: 0.85rem; font-style: italic; }
+
+  .no-data { background: #fff8e6; border: 1.5px dashed #e6b030; border-radius: 10px; padding: 24px; text-align: center; color: #8a6200; font-size: 0.95rem; line-height: 1.7; }
+  .no-data a { color: #3a6fd8; }
+  .no-folder-hint { background: #f0f4fc; border: 1px solid #c8d8f8; border-radius: 8px; padding: 12px 16px; margin-top: 12px; font-size: 0.82rem; color: #3a5a9a; text-align: left; line-height: 1.6; }
+
+  .divider { border: none; border-top: 2px solid #c8d8f8; margin: 32px 0; }
+
+  /* 過去履歴 */
+  .history-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .history-item { background: #fff; border: 1px solid #e0e6f0; border-radius: 8px; overflow: hidden; }
+  .history-item-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; user-select: none; background: #f8faff; transition: background 0.15s; }
+  .history-item-header:hover { background: #eef3ff; }
+  .history-item-date { font-weight: 700; color: #1a3a6b; font-size: 0.95rem; flex-shrink: 0; }
+  .history-item-summary { font-size: 0.82rem; color: #666; margin-left: 12px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-toggle { font-size: 0.8rem; color: #3a6fd8; font-weight: 700; flex-shrink: 0; }
+  .history-item-body { display: none; padding: 14px 16px; border-top: 1px solid #e8eef8; }
+  .history-item-body.open { display: block; }
+  .history-common { margin-bottom: 12px; }
+  .history-common h4 { font-size: 0.8rem; color: #3a6fd8; font-weight: 700; margin-bottom: 6px; }
+  .history-common ul { list-style: none; padding: 0; }
+  .history-common li { font-size: 0.88rem; padding: 2px 0 2px 12px; position: relative; }
+  .history-common li::before { content: '▸'; position: absolute; left: 0; color: #3a6fd8; font-size: 0.7rem; top: 4px; }
+  .history-teams { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .history-team { border-left: 3px solid var(--tc); padding-left: 8px; }
+  .history-team h5 { font-size: 0.78rem; font-weight: 700; color: var(--tc); margin-bottom: 4px; }
+  .history-team ul { list-style: none; padding: 0; }
+  .history-team li { font-size: 0.82rem; padding: 1px 0; color: #333; }
+  .history-team .no-items { color: #bbb; font-size: 0.78rem; font-style: italic; }
+
+  .loading { text-align: center; color: #888; padding: 32px; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>朝礼周知</h1>
+  <span class="today-date" id="headerDate"></span>
+  <a href="editor.html" target="_blank">周知を作成 →</a>
+</header>
+
+<!-- フォルダバー -->
+<div class="folder-bar">
+  <span class="fl">📁 データフォルダ:</span>
+  <span id="folderStatus"><span class="badge-none">未接続</span></span>
+  <button class="btn-sm" id="folderBtn" onclick="folderAction()">フォルダを選択</button>
+</div>
+
+<main>
+  <div id="todaySection"><div class="loading">読み込み中…</div></div>
+  <hr class="divider">
+  <div class="history-section">
+    <div class="section-title">過去の周知を確認する</div>
+    <div class="history-list" id="historyList"><div class="loading">読み込み中…</div></div>
+  </div>
+</main>
+
+<script>
+const TEAMS  = ['営業チーム','技術チーム','総合チーム','企画チーム','物流チーム'];
+const COLORS = { '営業チーム':'#3a6fd8','技術チーム':'#1d9e75','総合チーム':'#d85a30','企画チーム':'#7f77dd','物流チーム':'#ba7517' };
+
+let dataFolderHandle = null;
+let savedHandle      = null;
+
+const today    = new Date();
+const todayStr = fmtDate(today);
+document.getElementById('headerDate').textContent = fmtDateJP(todayStr);
+
+// ===== 起動 =====
+(async () => {
+  await tryRestoreFolder();
+  if (!dataFolderHandle) {
+    // Edgeなどfetchが有効な環境向けフォールバック
+    await loadAllData();
+  }
+})();
+
+// ===== IndexedDB（editor.htmlと共通DBを使用） =====
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('朝礼周知', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    req.onsuccess  = e  => resolve(e.target.result);
+    req.onerror    = () => reject(req.error);
+  });
+}
+async function saveHandleIDB(handle) {
+  try {
+    const db = await openDB();
+    await new Promise((res, rej) => {
+      const tx = db.transaction('handles', 'readwrite');
+      tx.objectStore('handles').put(handle, 'dataFolder');
+      tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+    });
+  } catch(e) { console.warn('IDB save:', e); }
+}
+async function loadHandleIDB() {
+  try {
+    const db = await openDB();
+    return await new Promise((res, rej) => {
+      const tx  = db.transaction('handles', 'readonly');
+      const req = tx.objectStore('handles').get('dataFolder');
+      req.onsuccess = () => res(req.result || null);
+      req.onerror   = () => rej(req.error);
+    });
+  } catch { return null; }
+}
+
+// ===== フォルダ復元・接続 =====
+async function tryRestoreFolder() {
+  const handle = await loadHandleIDB();
+  if (!handle) { setFolderUI(null); return; }
+  try {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      dataFolderHandle = handle;
+      setFolderUI('connected');
+      await loadAllData();
+    } else {
+      savedHandle = handle;
+      setFolderUI('reconnect');
+    }
+  } catch { setFolderUI(null); }
+}
+
+async function folderAction() {
+  if (savedHandle && !dataFolderHandle) {
+    try {
+      const perm = await savedHandle.requestPermission({ mode: 'readwrite' });
+      if (perm === 'granted') {
+        dataFolderHandle = savedHandle;
+        savedHandle = null;
+        setFolderUI('connected');
+        await loadAllData();
+      }
+    } catch(e) { if (e.name !== 'AbortError') console.error(e); }
+  } else {
+    if (!window.showDirectoryPicker) {
+      alert('このブラウザはフォルダ選択に未対応です。Edgeをご利用ください。');
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      dataFolderHandle = handle;
+      savedHandle = null;
+      await saveHandleIDB(handle);
+      setFolderUI('connected');
+      await loadAllData();
+    } catch(e) { console.error('folderAction error:', e.name, e.message); }
+  }
+}
+
+function setFolderUI(state) {
+  const st  = document.getElementById('folderStatus');
+  const btn = document.getElementById('folderBtn');
+  if (state === 'connected') {
+    st.innerHTML    = '<span class="badge-connected">✓ 接続済み</span>';
+    btn.textContent = '別のフォルダを選択';
+  } else if (state === 'reconnect') {
+    st.innerHTML    = '<span class="badge-reconnect">⚠ 前回のフォルダが見つかりました</span>';
+    btn.textContent = '再接続する';
+  } else {
+    st.innerHTML    = '<span class="badge-none">未接続（Edgeでは自動読み込みが有効）</span>';
+    btn.textContent = 'フォルダを選択';
+  }
+}
+
+// ===== ファイル読み込み =====
+async function readHandleJSON(name) {
+  if (!dataFolderHandle) return null;
+  try {
+    const fh = await dataFolderHandle.getFileHandle(name);
+    return JSON.parse(await (await fh.getFile()).text());
+  } catch { return null; }
+}
+async function fetchJSON(name) {
+  try {
+    const r = await fetch('data/' + name);
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+async function loadJSON(name) {
+  // フォルダハンドル優先、なければfetch
+  if (dataFolderHandle) {
+    const d = await readHandleJSON(name);
+    if (d !== null) return d;
+  }
+  return await fetchJSON(name);
+}
+
+// ===== データ全読み込み =====
+async function loadAllData() {
+  // 今日
+  const todayData = await loadJSON(todayStr + '.json');
+  renderTodaySection(todayData);
+
+  // 過去30日
+  const histEl = document.getElementById('historyList');
+  histEl.innerHTML = '<div class="loading">過去のデータを読み込み中…</div>';
+
+  const tasks = [];
+  for (let i = 1; i <= 30; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const ds = fmtDate(d);
+    tasks.push(loadJSON(ds + '.json').then(data => ({ dateStr: ds, data })));
+  }
+  const results = await Promise.all(tasks);
+  const found   = results.filter(r => r.data !== null);
+
+  if (found.length === 0) {
+    histEl.innerHTML = '<div class="loading" style="color:#aaa;">過去の周知データはありません</div>';
+  } else {
+    histEl.innerHTML = found.map(r => renderHistoryItem(r.dateStr, r.data)).join('');
+  }
+}
+
+// ===== 今日セクション描画 =====
+function renderTodaySection(data) {
+  const sec = document.getElementById('todaySection');
+  if (!data) {
+    const folderHint = !dataFolderHandle
+      ? `<div class="no-folder-hint">
+          💡 データが表示されない場合は、上部の「フォルダを選択」で <strong>data/</strong> フォルダを選択してください。<br>
+          editor.html でフォルダを選択済みの場合は「再接続する」をクリックしてください。
+        </div>`
+      : '';
+    sec.innerHTML = `
+      <div class="today-header">
+        <span class="today-badge">今日</span>
+        <span class="today-date-label">${fmtDateJP(todayStr)}</span>
+      </div>
+      <div class="no-data">
+        本日の周知はまだ作成されていません。<br>
+        <a href="editor.html" target="_blank">editor.html</a> から作成してください。
+        ${folderHint}
+      </div>`;
+    return;
+  }
+  const common = data.common || [];
+  const teams  = data.teams  || {};
+  let html = `
+    <div class="today-header">
+      <span class="today-badge">今日</span>
+      <span class="today-date-label">${fmtDateJP(todayStr)}</span>
+    </div>`;
+  if (common.length > 0) {
+    html += `<div class="common-card">
+      <h3>全員共通のお知らせ</h3>
+      <ul>${common.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+    </div>`;
+  }
+  html += `<div class="teams-grid">`;
+  for (const team of TEAMS) {
+    const c     = COLORS[team];
+    const items = teams[team] || [];
+    html += `<div class="team-card" style="--tc:${c}">
+      <h3>${esc(team)}</h3>`;
+    if (items.length > 0) {
+      html += `<ul>${items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
+    } else {
+      html += `<p class="no-items">本日の連絡事項はありません</p>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>`;
+  sec.innerHTML = html;
+}
+
+// ===== 過去履歴アイテム =====
+function renderHistoryItem(dateStr, data) {
+  const common  = data.common || [];
+  const teams   = data.teams  || {};
+  const summary = common.length > 0 ? common[0] : (Object.values(teams).flat()[0] || '');
+  let html = `<div class="history-item" id="hist-${dateStr}">
+    <div class="history-item-header" onclick="toggleHistory('${dateStr}')">
+      <span class="history-item-date">${fmtDateJP(dateStr)}</span>
+      <span class="history-item-summary">${esc(summary)}</span>
+      <span class="history-toggle" id="toggle-${dateStr}">▼</span>
+    </div>
+    <div class="history-item-body" id="body-${dateStr}">`;
+  if (common.length > 0) {
+    html += `<div class="history-common">
+      <h4>全員共通</h4>
+      <ul>${common.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+    </div>`;
+  }
+  const hasItems = TEAMS.some(t => (teams[t] || []).length > 0);
+  if (hasItems) {
+    html += `<div class="history-teams">`;
+    for (const team of TEAMS) {
+      const c     = COLORS[team];
+      const items = teams[team] || [];
+      html += `<div class="history-team" style="--tc:${c}">
+        <h5>${esc(team)}</h5>`;
+      if (items.length > 0) {
+        html += `<ul>${items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
+      } else {
+        html += `<span class="no-items">なし</span>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+function toggleHistory(dateStr) {
+  const body   = document.getElementById(`body-${dateStr}`);
+  const toggle = document.getElementById(`toggle-${dateStr}`);
+  const open   = body.classList.toggle('open');
+  toggle.textContent = open ? '▲' : '▼';
+  if (open) body.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ===== ユーティリティ =====
+function fmtDate(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtDateJP(ds) {
+  const d  = new Date(ds+'T00:00:00');
+  const dn = '日月火水木金土';
+  return d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日（'+dn[d.getDay()]+'）';
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
