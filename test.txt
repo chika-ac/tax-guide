@@ -1,4 +1,4 @@
-AOption Explicit
+Option Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -774,7 +774,7 @@ End Sub
 ' ============================================================
 Sub Build_5Min_Callback()
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Sheets("5分×折り返し分析")
+    Set ws = ThisWorkbook.Sheets("時間別折り返し分析")
     ws.Rows("3:" & ws.Rows.Count).ClearContents
     ws.Rows("3:" & ws.Rows.Count).ClearFormats
     ' ヘッダー行を薄いブルー×黒文字で再描画
@@ -994,33 +994,7 @@ NextRow2:
 
     Dim outRow As Long: outRow = 3
 
-    ' ── ① 呼び出し結果別×日付クロス集計 ────────────────
-    Call WriteSectionTitle(ws, outRow, 1, 3 + nDates, _
-        "① 呼び出し結果別 × 日付 クロス集計（受電のみ）", COL_LIGHT, False)
-    outRow = outRow + 1
-    ws.Cells(outRow, 2).Value = "日付"
-    For ri = 0 To nRes: ws.Cells(outRow, 3 + ri).Value = results(ri): Next ri
-    ws.Cells(outRow, 3 + nRes + 1).Value = "総計"
-    Call StyleHeader(ws, outRow, 3 + nRes + 1, False)
-    ' 列2はヘッダーの対象外なので個別設定
-    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
-    ws.Cells(outRow, 2).Font.Bold = True
-    ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
-    outRow = outRow + 1
-    For di = 1 To nDates
-        Call StyleDataRow(ws, outRow, 3 + nRes + 1, di Mod 2 = 0)
-        ws.Cells(outRow, 2).Value = dateKeys(di)
-        Dim rowTotal As Long: rowTotal = 0
-        For ri = 0 To nRes
-            ws.Cells(outRow, 3 + ri).Value = cross(di, ri)
-            rowTotal = rowTotal + cross(di, ri)
-        Next ri
-        ws.Cells(outRow, 3 + nRes + 1).Value = rowTotal
-        outRow = outRow + 1
-    Next di
-    outRow = outRow + 1
-
-    ' ── ② 日別対応サマリー ──────────────────────────
+    ' ── ① 日別対応サマリー ──────────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 3 + nDates, _
         "② 日別対応サマリー（①入電 ②受電 ③放棄呼 ④発信 ⑤全体）", COL_LIGHT, False)
     outRow = outRow + 1
