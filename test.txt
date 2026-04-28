@@ -1,39 +1,7 @@
-' ── ③-2 日別 総対応時間（着信・発信） ───────────────
-    Call WriteSectionTitle(ws, outRow, 1, 4, _
-        "③-2 日別 総対応時間（G列－F列 秒合計）", COL_LIGHT, False)
-    outRow = outRow + 1
-    ws.Cells(outRow, 2).Value = "日付"
-    ws.Cells(outRow, 3).Value = "着信 総対応時間（秒）"
-    ws.Cells(outRow, 4).Value = "発信 総対応時間（秒）"
-    Call StyleHeader(ws, outRow, 4, False)
-    outRow = outRow + 1
-
-    Dim di6 As Long
-    For di6 = 1 To nDates
-        Dim totalInbSec As Double: totalInbSec = 0
-        Dim totalOutSec As Double: totalOutSec = 0
-        Dim i6 As Long
-        For i6 = 1 To nRows
-            Dim dt6 As Date: dt6 = ParseDT(data(i6, 4))
-            If dt6 = 0 Then GoTo NextRow6
-            If Int(dt6) < dtStart Or Int(dt6) > dtEnd Then GoTo NextRow6
-            If Format(Int(dt6), "yyyy/mm/dd") <> dateKeys(di6) Then GoTo NextRow6
-            If IsSelfCall(data(i6, 2), data(i6, 3)) Then GoTo NextRow6
-            Dim stDT6 As Date: stDT6 = ParseDT(data(i6, 6))
-            Dim endDT6 As Date: endDT6 = ParseDT(data(i6, 7))
-            If stDT6 = 0 Or endDT6 = 0 Or endDT6 <= stDT6 Then GoTo NextRow6
-            Dim sec6 As Double: sec6 = (endDT6 - stDT6) * 86400
-            If data(i6, 1) = "着信" Then
-                totalInbSec = totalInbSec + sec6
-            ElseIf data(i6, 1) = "発信" Then
-                totalOutSec = totalOutSec + sec6
-            End If
-NextRow6:
-        Next i6
-        Call StyleDataRow(ws, outRow, 4, di6 Mod 2 = 0)
-        ws.Cells(outRow, 2).Value = dateKeys(di6)
-        ws.Cells(outRow, 3).Value = CLng(totalInbSec)
-        ws.Cells(outRow, 4).Value = CLng(totalOutSec)
-        outRow = outRow + 1
-    Next di6
-    outRow = outRow + 1
+Function SecsToHMS(secs As Long) As String
+    Dim h As Long, m As Long, s As Long
+    h = secs \ 3600
+    m = (secs Mod 3600) \ 60
+    s = secs Mod 60
+    SecsToHMS = Format(h, "0") & ":" & Format(m, "00") & ":" & Format(s, "00")
+End Function
