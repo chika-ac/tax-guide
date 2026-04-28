@@ -1,4 +1,4 @@
-Option Explicit
+AOption Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -245,6 +245,20 @@ Sub WriteKPI(ws As Worksheet, r As Long, c As Long, _
     End With
     ws.Rows(r + 2).RowHeight = 16
 End Sub
+
+' 除外判定：B列（発信元）とC列（受電先）の両方がセンター番号の場合はTrue
+' ※末尾NORM_DIGITS桁で比較。センター番号＝0454140333 → 末尾8桁=54140333
+Const EXCLUDE_NUM As String = "54140333"   ' ← 除外対象の末尾8桁（変更可）
+
+Function IsExcludedRow(src As String, dst As String) As Boolean
+    Dim src8 As String: src8 = NormPhone(src, NORM_DIGITS)
+    Dim dst8 As String: dst8 = NormPhone(dst, NORM_DIGITS)
+    If src8 = EXCLUDE_NUM And dst8 = EXCLUDE_NUM Then
+        IsExcludedRow = True
+    Else
+        IsExcludedRow = False
+    End If
+End Function
 
 ' イベントテーブルのB3・B4から期間を取得する共通関数
 Function GetDateRange(ByRef dtStart As Date, ByRef dtEnd As Date) As Boolean
@@ -672,6 +686,8 @@ Sub Build_Callback_Analysis()
             If recvDT = 0 Then GoTo NextRow
             ' 期間外スキップ
             If Int(recvDT) < dtStart Or Int(recvDT) > dtEnd Then GoTo NextRow
+            ' 除外判定（B列・C列両方がセンター番号）
+            If IsExcludedRow(data(i, 2), data(i, 3)) Then GoTo NextRow
 
             Dim ivrDT  As Date: ivrDT  = ParseDT(data(i, 5))
             Dim stDT   As Date: stDT   = ParseDT(data(i, 6))
@@ -947,6 +963,8 @@ Sub Build_Aggregate()
         If dt2 = 0 Then GoTo NextRow2
         ' 期間外スキップ
         If Int(dt2) < dtStart Or Int(dt2) > dtEnd Then GoTo NextRow2
+        ' 除外判定（B列・C列両方がセンター番号）
+        If IsExcludedRow(data(i, 2), data(i, 3)) Then GoTo NextRow2
         Dim dk2 As String: dk2 = Format(Int(dt2), "yyyy/mm/dd")
         Dim di As Long: di = 0
         For j = 1 To nDates
@@ -1054,8 +1072,47 @@ NextRow2:
     outRow = outRow + 1
 
     ' ── ③ 時間帯別待ち時間（5分枠×日付） ─────────────
+    ' ── ③ 放棄呼テーブル ─────────────────────────────
+    Call WriteSectionTitle(ws, outRow, 1, 4, _
+        "③ 放棄呼テーブル（着信かつ放棄呼：受電日時・待ち時間）", COL_DARK, True)
+    outRow = outRow + 1
+    ws.Cells(outRow, 2).Value = "受電日時"
+    ws.Cells(outRow, 3).Value = "発信元番号"
+    ws.Cells(outRow, 4).Value = "待ち時間（秒）"
+    Call StyleHeader(ws, outRow, 4, False)
+    outRow = outRow + 1
+
+    Dim abRow As Long
+    For abRow = 1 To nRows
+        If data(abRow, 1) = "着信" And data(abRow, 8) = "放棄呼" Then
+            Dim abDT As Date: abDT = ParseDT(data(abRow, 4))
+            If abDT = 0 Then GoTo NextAbRow
+            If Int(abDT) < dtStart Or Int(abDT) > dtEnd Then GoTo NextAbRow
+            If IsExcludedRow(data(abRow, 2), data(abRow, 3)) Then GoTo NextAbRow
+            ' 待ち時間 = G - E
+            Dim abIvr As String: abIvr = data(abRow, 5)
+            Dim abEnd As String: abEnd = data(abRow, 7)
+            Dim abWait As String: abWait = "-"
+            If abIvr <> Chr(34) And abIvr <> "" Then
+                Dim abIvrDT As Date: abIvrDT = ParseDT(abIvr)
+                Dim abEndDT As Date: abEndDT = ParseDT(abEnd)
+                If abIvrDT > 0 And abEndDT > abIvrDT Then
+                    abWait = Format((abEndDT - abIvrDT) * 86400, "0")
+                End If
+            End If
+            Call StyleDataRow(ws, outRow, 4, outRow Mod 2 = 0)
+            ws.Cells(outRow, 2).Value = Format(abDT, "yyyy/mm/dd hh:mm")
+            ws.Cells(outRow, 3).Value = data(abRow, 2)
+            ws.Cells(outRow, 4).Value = abWait
+            outRow = outRow + 1
+        End If
+NextAbRow:
+    Next abRow
+    outRow = outRow + 1
+
+    ' ── ④ 時間帯別 待ち時間（旧③） ─────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 2 + nDates, _
-        "③ 時間帯別 待ち時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
+        "④ 時間帯別 待ち時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
         COL_DARK, True)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "時間帯（5分枠）"
@@ -1139,7 +1196,7 @@ NextSlot:
 SkipWaitSection:
     ' ── ④ 日付別×午前午後件数 ───────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 5, _
-        "④ 日付別 × 時間帯（午前/午後）別 受電件数", COL_DARK, True)
+        "⑤ 日付別 × 時間帯（午前/午後）別 受電件数", COL_DARK, True)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "日付"
     ws.Cells(outRow, 3).Value = "午前（〜11:59）"
@@ -1175,7 +1232,7 @@ NextRow4:
 
     ' ── ⑤ 着信・放棄呼 日付別 待ち時間一覧 ──────────
     Call WriteSectionTitle(ws, outRow, 1, 10, _
-        "⑤ 着信・放棄呼 日付別 待ち時間一覧（1件1列、単位：秒、G列－E列）", COL_DARK, True)
+        "⑥ 着信・放棄呼 日付別 待ち時間一覧（1件1列、単位：秒、G列－E列）", COL_DARK, True)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "日付"
     ws.Cells(outRow, 3).Value = "着信件数"
