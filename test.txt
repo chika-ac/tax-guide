@@ -1,4 +1,4 @@
-Option Explicit
+AOption Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -771,7 +771,7 @@ NextCBRow:
         Dim rate As Double
         If total > 0 Then rate = cbCnt / total * 100 Else rate = 0
 
-        ReDim times(1 To 500) As Double
+        ReDim times(1 To nCBTimes + 1) As Double
         Dim nT As Long: nT = 0
         For k = 1 To nCBTimes
             If cbTimeKeys(k) = bucketKeys(bi) Then
@@ -1021,6 +1021,7 @@ NextRow2:
     tt = tS
     Dim si As Long
     For si = 1 To nSlots: slotTimes2(si) = tt: tt = tt + TimeSerial(0, 5, 0): Next si
+    If nDates = 0 Or nSlots = 0 Then GoTo SkipWaitSection
     ReDim waitSum(1 To nSlots, 1 To nDates) As Double
     ReDim waitCnt(1 To nSlots, 1 To nDates) As Long
 
@@ -1080,6 +1081,7 @@ NextSlot:
     Next si2
     outRow = outRow + 1
 
+SkipWaitSection:
     ' ── ④ 日付別×午前午後件数 ───────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 5, _
         "④ 日付別 × 時間帯（午前/午後）別 受電件数", COL_DARK, True)
@@ -1137,7 +1139,7 @@ NextRow4:
     For di = 1 To nDates
         Dim inbCnt As Long: inbCnt = 0
         Dim abdCnt As Long: abdCnt = 0
-        ReDim waitList(1 To 500) As Double
+        ReDim waitList(1 To nRows) As Double
         Dim nWait As Long: nWait = 0
 
         For i = 1 To nRows
