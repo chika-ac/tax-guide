@@ -471,9 +471,9 @@ Sub Build_Event_Table()
         ws.Cells(5, 2 + di).Value = Format(dayList(di), "m/d") & _
             "（" & wdArr(Weekday(dayList(di)) - 1) & "）"
     Next di
-    Call StyleHeader(ws, 5, 2 + nDays, True)
-    ws.Cells(5, 2).Interior.Color = RGB(192, 0, 0)
-    ws.Cells(5, 2).Font.Color = RGB(255, 255, 255)
+    Call StyleHeader(ws, 5, 2 + nDays, False)
+    ws.Cells(5, 2).Interior.Color = COL_LIGHT
+    ws.Cells(5, 2).Font.Color = RGB(0, 0, 0)
 
     ' データ行出力
     Dim outRow As Long
@@ -533,8 +533,8 @@ Sub Build_Event_Table()
 
     ' 最大値行
     With ws.Range(ws.Cells(outRow, 1), ws.Cells(outRow, 2 + nDays))
-        .Interior.Color = COL_DARK
-        .Font.Color = RGB(255, 255, 255)
+        .Interior.Color = COL_LIGHT
+        .Font.Color = RGB(0, 0, 0)
         .Font.Bold = True
         .Font.Name = "Arial"
         .HorizontalAlignment = xlCenter
@@ -777,6 +777,11 @@ Sub Build_5Min_Callback()
     Set ws = ThisWorkbook.Sheets("5分×折り返し分析")
     ws.Rows("3:" & ws.Rows.Count).ClearContents
     ws.Rows("3:" & ws.Rows.Count).ClearFormats
+    ' ヘッダー行を薄いブルー×黒文字で再描画
+    Call StyleHeader(ws, 2, 7, False)
+    ws.Range("A1:G1").Interior.Color = COL_LIGHT
+    ws.Range("A1:G1").Font.Color = RGB(0, 0, 0)
+    ws.Range("A1:G1").Font.Bold = True
 
     ' 期間取得
     Dim wsEV As Worksheet
@@ -991,7 +996,7 @@ NextRow2:
 
     ' ── ① 呼び出し結果別×日付クロス集計 ────────────────
     Call WriteSectionTitle(ws, outRow, 1, 3 + nDates, _
-        "① 呼び出し結果別 × 日付 クロス集計（受電のみ）", COL_DARK, True)
+        "① 呼び出し結果別 × 日付 クロス集計（受電のみ）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "日付"
     For ri = 0 To nRes: ws.Cells(outRow, 3 + ri).Value = results(ri): Next ri
@@ -1017,7 +1022,7 @@ NextRow2:
 
     ' ── ② 日別対応サマリー ──────────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 3 + nDates, _
-        "② 日別対応サマリー（①入電 ②受電 ③放棄呼 ④発信 ⑤全体）", COL_DARK, True)
+        "② 日別対応サマリー（①入電 ②受電 ③放棄呼 ④発信 ⑤全体）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "項目"
     ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
@@ -1076,7 +1081,7 @@ NextRow2:
     ' ── ③ 時間帯別待ち時間（5分枠×日付） ─────────────
     ' ── ③ 放棄呼テーブル ─────────────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 4, _
-        "③ 放棄呼テーブル（着信かつ放棄呼：受電日時・待ち時間）", COL_DARK, True)
+        "③ 放棄呼テーブル（着信かつ放棄呼：受電日時・待ち時間）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "受電日時"
     ws.Cells(outRow, 3).Value = "発信元番号"
@@ -1115,7 +1120,7 @@ NextAbRow:
     ' ── ④ 時間帯別 待ち時間（旧③） ─────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 2 + nDates, _
         "④ 時間帯別 待ち時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
-        COL_DARK, True)
+        COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "時間帯（5分枠）"
     ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
@@ -1198,7 +1203,7 @@ NextSlot:
 SkipWaitSection:
     ' ── ④ 日付別×午前午後件数 ───────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 5, _
-        "⑤ 日付別 × 時間帯（午前/午後）別 受電件数", COL_DARK, True)
+        "⑤ 日付別 × 時間帯（午前/午後）別 受電件数", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "日付"
     ws.Cells(outRow, 3).Value = "午前（〜11:59）"
@@ -1234,7 +1239,7 @@ NextRow4:
 
     ' ── ⑤ 着信・放棄呼 日付別 待ち時間一覧 ──────────
     Call WriteSectionTitle(ws, outRow, 1, 10, _
-        "⑥ 着信・放棄呼 日付別 待ち時間一覧（1件1列、単位：秒、G列－E列）", COL_DARK, True)
+        "⑥ 着信・放棄呼 日付別 待ち時間一覧（1件1列、単位：秒、G列－E列）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "日付"
     ws.Cells(outRow, 3).Value = "着信件数"
@@ -1371,7 +1376,7 @@ Sub Build_Summary()
 
     ' KPI出力
     Dim outRow As Long: outRow = 3
-    Call WriteKPI(ws, outRow, 2, "総受電数", CStr(totalRecv), "全期間合計", COL_DARK)
+    Call WriteKPI(ws, outRow, 2, "総受電数", CStr(totalRecv), "全期間合計", COL_MID)
     Call WriteKPI(ws, outRow, 4, "最大同時通話数", CStr(maxConc), "必要回線数ピーク", COL_DARKRED)
     outRow = outRow + 4
     Call WriteKPI(ws, outRow, 2, "折り返し件数", CStr(totalCB), _
@@ -1381,7 +1386,7 @@ Sub Build_Summary()
     outRow = outRow + 4
 
     ' ボトルネック診断
-    Call WriteSectionTitle(ws, outRow, 2, 5, "🔍 ボトルネック診断", COL_DARKRED, True)
+    Call WriteSectionTitle(ws, outRow, 2, 5, "🔍 ボトルネック診断", COL_MID, False)
     outRow = outRow + 1
 
     Dim diagItems(0 To 3) As String
