@@ -1,1 +1,6 @@
-"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --allow-file-access-from-files "file:////YH-23/share/へ/99/ポータル.html"
+With ws.Application.ActiveWindow
+    .FreezePanes = False
+End With
+ws.Activate
+ws.Cells(6, 1).Select
+ws.Application.ActiveWindow.FreezePanes = True
