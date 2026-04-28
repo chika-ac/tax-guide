@@ -1,4 +1,4 @@
-Option Explicit
+AOption Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -85,6 +85,29 @@ Function ParseDT(s As String) As Date
     If s = "" Or s = Chr(34) Or s = "-" Then
         ParseDT = 0
         Exit Function
+    End If
+    ' yyyy/mm/dd h:mm:ss 形式を明示的に処理
+    If Len(s) >= 16 Then
+        Dim datePart As String, timePart As String
+        Dim spPos As Long
+        spPos = InStr(s, " ")
+        If spPos > 0 Then
+            datePart = Left(s, spPos - 1)
+            timePart = Mid(s, spPos + 1)
+            Dim dParts() As String, tParts() As String
+            dParts = Split(datePart, "/")
+            tParts = Split(timePart, ":")
+            If UBound(dParts) = 2 And UBound(tParts) >= 1 Then
+                Dim yr As Long, mo As Long, dy As Long
+                Dim hh As Long, mi As Long, ss As Long
+                yr = CLng(dParts(0)): mo = CLng(dParts(1)): dy = CLng(dParts(2))
+                hh = CLng(tParts(0)): mi = CLng(tParts(1))
+                ss = 0
+                If UBound(tParts) >= 2 Then ss = CLng(tParts(2))
+                ParseDT = DateSerial(yr, mo, dy) + TimeSerial(hh, mi, ss)
+                Exit Function
+            End If
+        End If
     End If
     ParseDT = CDate(s)
     Exit Function
@@ -315,7 +338,7 @@ Sub Build_Event_Table()
     nEv = 0
     Dim i As Long
     For i = 1 To nRows
-        If data(i, 1) = "受電" Then
+        If data(i, 1) = "着信" Then
             Dim recvDT As Date, endDT As Date
             recvDT = ParseDT(data(i, 4))
             endDT  = ParseDT(data(i, 7))
@@ -619,7 +642,7 @@ Sub Build_Callback_Analysis()
     outRow = 3
 
     For i = 1 To nRows
-        If data(i, 1) = "受電" Then
+        If data(i, 1) = "着信" Then
             Dim recvDT As Date
             recvDT = ParseDT(data(i, 4))
             If recvDT = 0 Then GoTo NextRow
@@ -852,7 +875,7 @@ Sub Build_Aggregate()
     Dim nDates As Long: nDates = 0
     Dim i As Long, j As Long
     For i = 1 To nRows
-        If data(i, 1) = "受電" Then
+        If data(i, 1) = "着信" Then
             Dim dt As Date: dt = ParseDT(data(i, 4))
             If dt > 0 Then
                 Dim dk As String: dk = Format(Int(dt), "yyyy/mm/dd")
@@ -899,7 +922,7 @@ Sub Build_Aggregate()
         Next j
         If di = 0 Then GoTo NextRow2
 
-        If knd = "受電" Then
+        If knd = "着信" Then
             Dim res2 As String: res2 = data(i, 8)
             dailyIn(di) = dailyIn(di) + 1
             Dim ri As Long
@@ -1026,7 +1049,7 @@ NextRow2:
     ReDim waitCnt(1 To nSlots, 1 To nDates) As Long
 
     For i = 1 To nRows
-        If data(i, 1) = "受電" Then
+        If data(i, 1) = "着信" Then
             Dim ivrStr As String: ivrStr = data(i, 5)
             If ivrStr = Chr(34) Or ivrStr = "" Then GoTo NextRow3
             Dim ivrDT As Date: ivrDT = ParseDT(ivrStr)
@@ -1095,7 +1118,7 @@ SkipWaitSection:
     ReDim amCnt(1 To 500) As Long
     ReDim pmCnt(1 To 500) As Long
     For i = 1 To nRows
-        If data(i, 1) = "受電" Then
+        If data(i, 1) = "着信" Then
             Dim dt4 As Date: dt4 = ParseDT(data(i, 4))
             If dt4 = 0 Then GoTo NextRow4
             Dim dk4 As String: dk4 = Format(Int(dt4), "yyyy/mm/dd")
@@ -1143,7 +1166,7 @@ NextRow4:
         Dim nWait As Long: nWait = 0
 
         For i = 1 To nRows
-            If data(i, 1) = "受電" Then
+            If data(i, 1) = "着信" Then
                 Dim dt5 As Date: dt5 = ParseDT(data(i, 4))
                 If dt5 = 0 Then GoTo NextRow5
                 If Format(Int(dt5), "yyyy/mm/dd") <> dateKeys(di) Then GoTo NextRow5
@@ -1335,7 +1358,7 @@ Sub デバッグ確認()
     Dim nRecv As Long, nSend As Long, nOther As Long
     For i = 1 To nRows
         Select Case data(i, 1)
-            Case "受電": nRecv = nRecv + 1
+            Case "着信": nRecv = nRecv + 1
             Case "発信": nSend = nSend + 1
             Case Else:   nOther = nOther + 1
         End Select
