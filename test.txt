@@ -1,4 +1,4 @@
-Option Explicit
+AOption Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -12,11 +12,12 @@ Option Explicit
 ' ============================================================
 
 ' ── 定数（ここを変更してカスタマイズ） ─────────────────────
-Const NORM_DIGITS As Integer = 8
-Const TIME_START  As String  = "08:30"
-Const TIME_END    As String  = "17:30"
-Const WARN_RATIO  As Double  = 0.7
-Const CRIT_RATIO  As Double  = 0.9
+Const NORM_DIGITS   As Integer = 8
+Const TIME_START    As String  = "08:30"
+Const TIME_END      As String  = "17:30"
+Const WARN_RATIO    As Double  = 0.7
+Const CRIT_RATIO    As Double  = 0.9
+Const EXCLUDE_NUM   As String  = "54140333"  ' 除外対象の末尾8桁（変更可）
 
 ' ── カラー定数 ───────────────────────────────────────────────
 Const COL_DARK    As Long = 2031139     ' 1F3864
@@ -247,9 +248,6 @@ Sub WriteKPI(ws As Worksheet, r As Long, c As Long, _
 End Sub
 
 ' 除外判定：B列（発信元）とC列（受電先）の両方がセンター番号の場合はTrue
-' ※末尾NORM_DIGITS桁で比較。センター番号＝0454140333 → 末尾8桁=54140333
-Const EXCLUDE_NUM As String = "54140333"   ' ← 除外対象の末尾8桁（変更可）
-
 Function IsSelfCall(srcPhone As String, dstPhone As String) As Boolean
     Dim src8 As String: src8 = NormPhone(srcPhone, NORM_DIGITS)
     Dim dst8 As String: dst8 = NormPhone(dstPhone, NORM_DIGITS)
