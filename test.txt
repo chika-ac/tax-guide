@@ -950,7 +950,6 @@ Sub Build_Aggregate()
     Dim nRes As Long: nRes = 5
 
     ReDim cross(1 To 500, 0 To 5) As Long
-    ReDim dailyIn(1 To 500)    As Long
     ReDim dailyOut(1 To 500)   As Long
     ReDim dailyAband(1 To 500) As Long
 
@@ -971,7 +970,6 @@ Sub Build_Aggregate()
 
         If knd = "着信" Then
             Dim res2 As String: res2 = data(i, 8)
-            dailyIn(di) = dailyIn(di) + 1
             Dim ri As Long
             For ri = 0 To nRes
                 If res2 = results(ri) Then
@@ -981,7 +979,10 @@ Sub Build_Aggregate()
             Next ri
             If res2 = "放棄呼" Then dailyAband(di) = dailyAband(di) + 1
         ElseIf knd = "発信" Then
-            dailyOut(di) = dailyOut(di) + 1
+            ' C列（受電した電話番号）がセンター番号の場合は除外
+            If NormPhone(data(i, 3), NORM_DIGITS) <> EXCLUDE_NUM Then
+                dailyOut(di) = dailyOut(di) + 1
+            End If
         End If
 NextRow2:
     Next i
@@ -1044,13 +1045,14 @@ NextRow2:
         Dim total2 As Long: total2 = 0
         For di = 1 To nDates
             Dim v As Variant
-            Dim recvCnt As Long: recvCnt = dailyIn(di) - dailyAband(di)
+            Dim recvCnt As Long: recvCnt = cross(di, 0)          ' ③受電=応答件数
+            Dim inbCnt2 As Long: inbCnt2 = dailyAband(di) + recvCnt ' ①入電=②+③
             Select Case ki
-                Case 0: v = dailyIn(di)
+                Case 0: v = inbCnt2
                 Case 1: v = dailyAband(di)
                 Case 2:
-                    If dailyIn(di) > 0 Then
-                        v = Format(dailyAband(di) / dailyIn(di) * 100, "0.0") & "%"
+                    If inbCnt2 > 0 Then
+                        v = Format(dailyAband(di) / inbCnt2 * 100, "0.0") & "%"
                     Else: v = "-"
                     End If
                 Case 3: v = recvCnt
