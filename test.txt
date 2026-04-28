@@ -250,9 +250,9 @@ End Sub
 ' ※末尾NORM_DIGITS桁で比較。センター番号＝0454140333 → 末尾8桁=54140333
 Const EXCLUDE_NUM As String = "54140333"   ' ← 除外対象の末尾8桁（変更可）
 
-Function CheckExclude(src As String, dst As String) As Boolean
-    Dim src8 As String: src8 = NormPhone(src, NORM_DIGITS)
-    Dim dst8 As String: dst8 = NormPhone(dst, NORM_DIGITS)
+Function CheckExclude(srcPhone As String, dstPhone As String) As Boolean
+    Dim src8 As String: src8 = NormPhone(srcPhone, NORM_DIGITS)
+    Dim dst8 As String: dst8 = NormPhone(dstPhone, NORM_DIGITS)
     If src8 = EXCLUDE_NUM And dst8 = EXCLUDE_NUM Then
         CheckExclude = True
     Else
