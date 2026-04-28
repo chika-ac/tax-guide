@@ -466,7 +466,7 @@ Sub Build_Event_Table()
     wdArr(3) = "水": wdArr(4) = "木": wdArr(5) = "金": wdArr(6) = "土"
 
     ws.Cells(5, 1).Value = "時間帯（5分枠）"
-    ws.Cells(5, 2).Value = "時間帯最悪値"
+    ws.Cells(5, 2).Value = "時間帯最高値"
     For di = 1 To nDays
         ws.Cells(5, 2 + di).Value = Format(dayList(di), "m/d") & _
             "（" & wdArr(Weekday(dayList(di)) - 1) & "）"
@@ -483,7 +483,7 @@ Sub Build_Event_Table()
         slotStr = Format(Hour(slotTimes(si)), "00") & ":" & Format(Minute(slotTimes(si)), "00")
         ws.Cells(outRow, 1).Value = slotStr
 
-        ' B列：時間帯最悪値（指定範囲全日付の最大）
+        ' B列：時間帯最高値（指定範囲全日付の最大）
         Dim slotWorst As Long
         slotWorst = 0
         For di = 1 To nDays
@@ -550,12 +550,12 @@ Sub Build_Event_Table()
     Next di
     ws.Rows(outRow).RowHeight = 22
 
-    ' ── 右端：時間帯（1時間単位）最悪値サマリー列 ──────
+    ' ── 右端：時間帯（1時間単位）最高値サマリー列 ──────
     Dim summCol As Long
     summCol = 4 + nDays
 
     ws.Cells(5, summCol).Value = "時間帯（1時間）"
-    ws.Cells(5, summCol + 1).Value = "最悪値"
+    ws.Cells(5, summCol + 1).Value = "最高値"
     With ws.Range(ws.Cells(5, summCol), ws.Cells(5, summCol + 1))
         .Interior.Color = RGB(192, 0, 0)
         .Font.Color = RGB(255, 255, 255)
@@ -567,7 +567,7 @@ Sub Build_Event_Table()
     ws.Columns(summCol).ColumnWidth = 18
     ws.Columns(summCol + 1).ColumnWidth = 10
 
-    ' 時間帯ごとの最悪値を計算
+    ' 時間帯ごとの最高値を計算
     ReDim hourWorst(0 To 23) As Long
     Dim hh As Long
     For hh = 0 To 23: hourWorst(hh) = 0: Next hh
@@ -703,7 +703,7 @@ Sub Build_Callback_Analysis()
                 talkMin = Format((endDT - stDT) * 1440, "0.0")
             End If
 
-            ' 待ち時間 = G - E（秒）
+            ' 対応時間 = G - E（秒）
             Dim waitSec As String
             waitSec = "-"
             If ivrDT > 0 And endDT > 0 And endDT > ivrDT Then
@@ -774,7 +774,7 @@ End Sub
 ' ============================================================
 Sub Build_5Min_Callback()
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Sheets("時間別折り返し分析")
+    Set ws = ThisWorkbook.Sheets("5分×折り返し分析")
     ws.Rows("3:" & ws.Rows.Count).ClearContents
     ws.Rows("3:" & ws.Rows.Count).ClearFormats
     ' ヘッダー行を薄いブルー×黒文字で再描画
@@ -1052,14 +1052,14 @@ NextRow2:
     Next ki
     outRow = outRow + 1
 
-    ' ── ③ 時間帯別待ち時間（5分枠×日付） ─────────────
+    ' ── ③ 時間帯別対応時間（5分枠×日付） ─────────────
     ' ── ③ 放棄呼テーブル ─────────────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 4, _
-        "③ 放棄呼テーブル（着信かつ放棄呼：受電日時・待ち時間）", COL_LIGHT, False)
+        "③ 放棄呼テーブル（着信かつ放棄呼：受電日時・対応時間）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "受電日時"
     ws.Cells(outRow, 3).Value = "発信元番号"
-    ws.Cells(outRow, 4).Value = "待ち時間（秒）"
+    ws.Cells(outRow, 4).Value = "対応時間（秒）"
     Call StyleHeader(ws, outRow, 4, False)
     outRow = outRow + 1
 
@@ -1070,7 +1070,7 @@ NextRow2:
             If abDT = 0 Then GoTo NextAbRow
             If Int(abDT) < dtStart Or Int(abDT) > dtEnd Then GoTo NextAbRow
             If IsSelfCall(data(abRow, 2), data(abRow, 3)) Then GoTo NextAbRow
-            ' 待ち時間 = G - E
+            ' 対応時間 = G - E
             Dim abIvr As String: abIvr = data(abRow, 5)
             Dim abEnd As String: abEnd = data(abRow, 7)
             Dim abWait As String: abWait = "-"
@@ -1091,9 +1091,9 @@ NextAbRow:
     Next abRow
     outRow = outRow + 1
 
-    ' ── ④ 時間帯別 待ち時間（旧③） ─────────────────────
+    ' ── ④ 時間帯別 対応時間（旧③） ─────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 2 + nDates, _
-        "④ 時間帯別 待ち時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
+        "④ 時間帯別 対応時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
         COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "時間帯（5分枠）"
@@ -1210,67 +1210,6 @@ NextRow4:
         outRow = outRow + 1
     Next di
     outRow = outRow + 1
-
-    ' ── ⑤ 着信・放棄呼 日付別 待ち時間一覧 ──────────
-    Call WriteSectionTitle(ws, outRow, 1, 10, _
-        "⑥ 着信・放棄呼 日付別 待ち時間一覧（1件1列、単位：秒、G列－E列）", COL_LIGHT, False)
-    outRow = outRow + 1
-    ws.Cells(outRow, 2).Value = "日付"
-    ws.Cells(outRow, 3).Value = "着信件数"
-    ws.Cells(outRow, 4).Value = "放棄呼件数"
-    ws.Cells(outRow, 5).Value = "待ち時間①（以降1件1列）"
-    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT: ws.Cells(outRow, 2).Font.Bold = True
-    ws.Cells(outRow, 3).Interior.Color = COL_LIGHT: ws.Cells(outRow, 3).Font.Bold = True
-    ws.Cells(outRow, 4).Interior.Color = COL_LIGHT: ws.Cells(outRow, 4).Font.Bold = True
-    ws.Cells(outRow, 5).Interior.Color = COL_LIGHT: ws.Cells(outRow, 5).Font.Bold = True
-    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, 5)).Borders.LineStyle = xlContinuous
-    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, 5)).Font.Name = "Arial"
-    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, 5)).HorizontalAlignment = xlCenter
-    ws.Rows(outRow).RowHeight = 22
-    outRow = outRow + 1
-
-    For di = 1 To nDates
-        Dim inbCnt As Long: inbCnt = 0
-        Dim abdCnt As Long: abdCnt = 0
-        ReDim waitList(1 To nRows) As Double
-        Dim nWait As Long: nWait = 0
-
-        For i = 1 To nRows
-            If data(i, 1) = "着信" Then
-                Dim dt5 As Date: dt5 = ParseDT(data(i, 4))
-                If dt5 = 0 Then GoTo NextRow5
-                If Format(Int(dt5), "yyyy/mm/dd") <> dateKeys(di) Then GoTo NextRow5
-                inbCnt = inbCnt + 1
-                If data(i, 8) = "放棄呼" Then
-                    abdCnt = abdCnt + 1
-                    Dim ivrW As String: ivrW = data(i, 5)
-                    Dim endW As String: endW = data(i, 7)
-                    If ivrW <> Chr(34) And ivrW <> "" Then
-                        Dim ivrD As Date: ivrD = ParseDT(ivrW)
-                        Dim endD As Date: endD = ParseDT(endW)
-                        If ivrD > 0 And endD > ivrD Then
-                            nWait = nWait + 1
-                            waitList(nWait) = (endD - ivrD) * 86400
-                        End If
-                    End If
-                End If
-            End If
-NextRow5:
-        Next i
-
-        Dim nOutCols As Long
-        nOutCols = 4 + nWait
-        If nOutCols < 4 Then nOutCols = 4
-        Call StyleDataRow(ws, outRow, nOutCols, di Mod 2 = 0)
-        ws.Cells(outRow, 2).Value = dateKeys(di)
-        ws.Cells(outRow, 3).Value = inbCnt
-        ws.Cells(outRow, 4).Value = abdCnt
-        Dim wc As Long
-        For wc = 1 To nWait
-            ws.Cells(outRow, 4 + wc).Value = Format(waitList(wc), "0")
-        Next wc
-        outRow = outRow + 1
-    Next di
 
     ws.Columns("B:B").ColumnWidth = 16
     ws.Columns("C:C").ColumnWidth = 14
