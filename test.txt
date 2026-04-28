@@ -1,4 +1,4 @@
-AOption Explicit
+Option Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -250,13 +250,13 @@ End Sub
 ' ※末尾NORM_DIGITS桁で比較。センター番号＝0454140333 → 末尾8桁=54140333
 Const EXCLUDE_NUM As String = "54140333"   ' ← 除外対象の末尾8桁（変更可）
 
-Function IsExcludedRow(src As String, dst As String) As Boolean
+Function CheckExclude(src As String, dst As String) As Boolean
     Dim src8 As String: src8 = NormPhone(src, NORM_DIGITS)
     Dim dst8 As String: dst8 = NormPhone(dst, NORM_DIGITS)
     If src8 = EXCLUDE_NUM And dst8 = EXCLUDE_NUM Then
-        IsExcludedRow = True
+        CheckExclude = True
     Else
-        IsExcludedRow = False
+        CheckExclude = False
     End If
 End Function
 
@@ -687,7 +687,7 @@ Sub Build_Callback_Analysis()
             ' 期間外スキップ
             If Int(recvDT) < dtStart Or Int(recvDT) > dtEnd Then GoTo NextRow
             ' 除外判定（B列・C列両方がセンター番号）
-            If IsExcludedRow(data(i, 2), data(i, 3)) Then GoTo NextRow
+            If CheckExclude(data(i, 2), data(i, 3)) Then GoTo NextRow
 
             Dim ivrDT  As Date: ivrDT  = ParseDT(data(i, 5))
             Dim stDT   As Date: stDT   = ParseDT(data(i, 6))
@@ -964,7 +964,7 @@ Sub Build_Aggregate()
         ' 期間外スキップ
         If Int(dt2) < dtStart Or Int(dt2) > dtEnd Then GoTo NextRow2
         ' 除外判定（B列・C列両方がセンター番号）
-        If IsExcludedRow(data(i, 2), data(i, 3)) Then GoTo NextRow2
+        If CheckExclude(data(i, 2), data(i, 3)) Then GoTo NextRow2
         Dim dk2 As String: dk2 = Format(Int(dt2), "yyyy/mm/dd")
         Dim di As Long: di = 0
         For j = 1 To nDates
@@ -1088,7 +1088,7 @@ NextRow2:
             Dim abDT As Date: abDT = ParseDT(data(abRow, 4))
             If abDT = 0 Then GoTo NextAbRow
             If Int(abDT) < dtStart Or Int(abDT) > dtEnd Then GoTo NextAbRow
-            If IsExcludedRow(data(abRow, 2), data(abRow, 3)) Then GoTo NextAbRow
+            If CheckExclude(data(abRow, 2), data(abRow, 3)) Then GoTo NextAbRow
             ' 待ち時間 = G - E
             Dim abIvr As String: abIvr = data(abRow, 5)
             Dim abEnd As String: abEnd = data(abRow, 7)
