@@ -1,4 +1,4 @@
-Option Explicit
+AOption Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -17,7 +17,7 @@ Const TIME_START    As String  = "08:30"
 Const TIME_END      As String  = "17:30"
 Const WARN_RATIO    As Double  = 0.7
 Const CRIT_RATIO    As Double  = 0.9
-Const EXCLUDE_NUM   As String  = "54140333"  ' 除外対象の末尾8桁（変更可）
+Const EXCLUDE_NUM   As String  = "4140333"   ' 除外対象の末尾7桁（変更可）
 
 ' ── カラー定数 ───────────────────────────────────────────────
 Const COL_DARK    As Long = 2031139     ' 1F3864
@@ -249,8 +249,8 @@ End Sub
 
 ' 除外判定：B列（発信元）とC列（受電先）の両方がセンター番号の場合はTrue
 Function IsSelfCall(srcPhone As String, dstPhone As String) As Boolean
-    Dim src8 As String: src8 = NormPhone(srcPhone, NORM_DIGITS)
-    Dim dst8 As String: dst8 = NormPhone(dstPhone, NORM_DIGITS)
+    Dim src8 As String: src8 = NormPhone(srcPhone, 7)
+    Dim dst8 As String: dst8 = NormPhone(dstPhone, 7)
     If src8 = EXCLUDE_NUM And dst8 = EXCLUDE_NUM Then
         IsSelfCall = True
     Else
@@ -985,7 +985,7 @@ Sub Build_Aggregate()
             If res2 = "放棄呼" Then dailyAband(di) = dailyAband(di) + 1
         ElseIf knd = "発信" Then
             ' C列（受電した電話番号）がセンター番号の場合は除外
-            If NormPhone(data(i, 3), NORM_DIGITS) <> EXCLUDE_NUM Then
+            If NormPhone(data(i, 3), 7) <> EXCLUDE_NUM Then
                 dailyOut(di) = dailyOut(di) + 1
             End If
         End If
