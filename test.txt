@@ -1,6 +1,1 @@
-With ws.Application.ActiveWindow
-    .FreezePanes = False
-End With
-ws.Activate
-ws.Cells(6, 1).Select
-ws.Application.ActiveWindow.FreezePanes = True
+ws.Cells(outRow, 2 + di).Formula = "=MAX(" & ws.Cells(6, 2 + di).Address(True, True) & ":" & ws.Cells(outRow - 1, 2 + di).Address(True, True) & ")"
