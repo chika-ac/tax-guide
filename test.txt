@@ -1,4 +1,4 @@
-AOption Explicit
+Option Explicit
 
 ' ============================================================
 ' 電話ログ分析ツール v3 - メインマクロ
@@ -953,7 +953,6 @@ Sub Build_Aggregate()
     ReDim dailyIn(1 To 500)    As Long
     ReDim dailyOut(1 To 500)   As Long
     ReDim dailyAband(1 To 500) As Long
-    ReDim dailyAnsw(1 To 500)  As Long
 
     For i = 1 To nRows
         Dim knd As String: knd = data(i, 1)
@@ -980,7 +979,6 @@ Sub Build_Aggregate()
                     Exit For
                 End If
             Next ri
-            If res2 = "応答" Then dailyAnsw(di) = dailyAnsw(di) + 1
             If res2 = "放棄呼" Then dailyAband(di) = dailyAband(di) + 1
         ElseIf knd = "発信" Then
             dailyOut(di) = dailyOut(di) + 1
@@ -1030,9 +1028,12 @@ NextRow2:
     outRow = outRow + 1
 
     Dim kpiLabels(0 To 5) As String
-    kpiLabels(0) = "①入電件数": kpiLabels(1) = "②受電件数（応答）"
-    kpiLabels(2) = "③放棄呼数": kpiLabels(3) = "（参考）呼損率"
-    kpiLabels(4) = "④発信件数": kpiLabels(5) = "⑤全体対応（②＋④）"
+    kpiLabels(0) = "①入電件数"
+    kpiLabels(1) = "②放棄呼数"
+    kpiLabels(2) = "（参考）呼損率"
+    kpiLabels(3) = "③受電件数（①－②）"
+    kpiLabels(4) = "④発信件数"
+    kpiLabels(5) = "⑤全体対応（③＋④）"
 
     Dim ki As Long
     For ki = 0 To 5
@@ -1043,22 +1044,23 @@ NextRow2:
         Dim total2 As Long: total2 = 0
         For di = 1 To nDates
             Dim v As Variant
+            Dim recvCnt As Long: recvCnt = dailyIn(di) - dailyAband(di)
             Select Case ki
                 Case 0: v = dailyIn(di)
-                Case 1: v = dailyAnsw(di)
-                Case 2: v = dailyAband(di)
-                Case 3:
+                Case 1: v = dailyAband(di)
+                Case 2:
                     If dailyIn(di) > 0 Then
                         v = Format(dailyAband(di) / dailyIn(di) * 100, "0.0") & "%"
                     Else: v = "-"
                     End If
+                Case 3: v = recvCnt
                 Case 4: v = dailyOut(di)
-                Case 5: v = dailyAnsw(di) + dailyOut(di)
+                Case 5: v = recvCnt + dailyOut(di)
             End Select
             ws.Cells(outRow, 2 + di).Value = v
             If IsNumeric(v) Then total2 = total2 + CLng(v)
         Next di
-        If ki = 3 Then
+        If ki = 2 Then
             ws.Cells(outRow, 3 + nDates).Value = "-"
         Else
             ws.Cells(outRow, 3 + nDates).Value = total2
