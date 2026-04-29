@@ -925,7 +925,7 @@ Sub Build_Aggregate()
     Call ReadInputData(data, nRows)
     If nRows = 0 Then Exit Sub
 
-    ' 日付リスト（期間内のみ）
+    ' 日付リスト（期間内・着信のみ）
     ReDim dateKeys(1 To 500) As String
     Dim nDates As Long: nDates = 0
     Dim i As Long, j As Long
@@ -946,14 +946,16 @@ Sub Build_Aggregate()
             End If
         End If
     Next i
+    If nDates = 0 Then Exit Sub
+
     ' 日付ソート
-    Dim ti As Long, tj As Long, tmpS As String
+    Dim ti As Long, tja As Long, tmpS As String
     For ti = 1 To nDates - 1
-        For tj = 1 To nDates - ti
-            If dateKeys(tj) > dateKeys(tj + 1) Then
-                tmpS = dateKeys(tj): dateKeys(tj) = dateKeys(tj + 1): dateKeys(tj + 1) = tmpS
+        For tja = 1 To nDates - ti
+            If dateKeys(tja) > dateKeys(tja + 1) Then
+                tmpS = dateKeys(tja): dateKeys(tja) = dateKeys(tja + 1): dateKeys(tja + 1) = tmpS
             End If
-        Next tj
+        Next tja
     Next ti
 
     ' 結果種別
@@ -970,9 +972,7 @@ Sub Build_Aggregate()
         Dim knd As String: knd = data(i, 1)
         Dim dt2 As Date: dt2 = ParseDT(data(i, 4))
         If dt2 = 0 Then GoTo NextRow2
-        ' 期間外スキップ
         If Int(dt2) < dtStart Or Int(dt2) > dtEnd Then GoTo NextRow2
-        ' 除外判定（B列・C列両方がセンター番号）
         If IsSelfCall(data(i, 2), data(i, 3)) Then GoTo NextRow2
         Dim dk2 As String: dk2 = Format(Int(dt2), "yyyy/mm/dd")
         Dim di As Long: di = 0
@@ -980,19 +980,16 @@ Sub Build_Aggregate()
             If dateKeys(j) = dk2 Then di = j: Exit For
         Next j
         If di = 0 Then GoTo NextRow2
-
         If knd = "着信" Then
             Dim res2 As String: res2 = data(i, 8)
             Dim ri As Long
             For ri = 0 To nRes
                 If res2 = results(ri) Then
-                    cross(di, ri) = cross(di, ri) + 1
-                    Exit For
+                    cross(di, ri) = cross(di, ri) + 1: Exit For
                 End If
             Next ri
             If res2 = "放棄呼" Then dailyAband(di) = dailyAband(di) + 1
         ElseIf knd = "発信" Then
-            ' C列（受電した電話番号）がセンター番号の場合は除外
             If NormPhone(data(i, 3), 7) <> EXCLUDE_NUM Then
                 dailyOut(di) = dailyOut(di) + 1
             End If
@@ -1004,12 +1001,14 @@ NextRow2:
 
     ' ── ① 日別対応サマリー ──────────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 3 + nDates, _
-        "② 日別対応サマリー（①入電 ②受電 ③放棄呼 ④発信 ⑤全体）", COL_LIGHT, False)
+        "① 日別対応サマリー（①入電 ②放棄呼 呼損率 ③受電 ④発信 ⑤全体）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "項目"
     ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
     ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
     ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+    ws.Cells(outRow, 2).HorizontalAlignment = xlCenter
     For di = 1 To nDates: ws.Cells(outRow, 2 + di).Value = dateKeys(di): Next di
     ws.Cells(outRow, 3 + nDates).Value = "合計"
     Call StyleHeader(ws, outRow, 3 + nDates, False)
@@ -1032,8 +1031,8 @@ NextRow2:
         Dim total2 As Long: total2 = 0
         For di = 1 To nDates
             Dim v As Variant
-            Dim recvCnt As Long: recvCnt = cross(di, 0)          ' ③受電=応答件数
-            Dim inbCnt2 As Long: inbCnt2 = dailyAband(di) + recvCnt ' ①入電=②+③
+            Dim recvCnt As Long: recvCnt = cross(di, 0)
+            Dim inbCnt2 As Long: inbCnt2 = dailyAband(di) + recvCnt
             Select Case ki
                 Case 0: v = inbCnt2
                 Case 1: v = dailyAband(di)
@@ -1060,10 +1059,9 @@ NextRow2:
     Next ki
     outRow = outRow + 1
 
-    ' ── ③ 時間帯別対応時間（5分枠×日付） ─────────────
-    ' ── ③ 放棄呼テーブル ─────────────────────────────
+    ' ── ② 放棄呼テーブル ─────────────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 4, _
-        "③ 放棄呼テーブル（着信かつ放棄呼：受電日時・対応時間）", COL_LIGHT, False)
+        "② 放棄呼テーブル（着信かつ放棄呼：受電日時・対応時間）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "受電日時"
     ws.Cells(outRow, 3).Value = "発信元番号"
@@ -1078,7 +1076,6 @@ NextRow2:
             If abDT = 0 Then GoTo NextAbRow
             If Int(abDT) < dtStart Or Int(abDT) > dtEnd Then GoTo NextAbRow
             If IsSelfCall(data(abRow, 2), data(abRow, 3)) Then GoTo NextAbRow
-            ' 対応時間 = G - E
             Dim abIvr As String: abIvr = data(abRow, 5)
             Dim abEnd As String: abEnd = data(abRow, 7)
             Dim abWait As String: abWait = "-"
@@ -1099,133 +1096,98 @@ NextAbRow:
     Next abRow
     outRow = outRow + 1
 
-    ' ── ④ 時間帯別 対応時間（旧③） ─────────────────────
-    Call WriteSectionTitle(ws, outRow, 1, 2 + nDates, _
-        "④ 時間帯別 対応時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
-        COL_LIGHT, False)
+    ' ── ③ 時間別受電テーブル（応答＋放棄呼=入電件数と同定義） ──
+    Dim startH As Long: startH = Hour(TimeValue(TIME_START))
+    Dim endH   As Long: endH   = Hour(TimeValue(TIME_END))
+
+    ReDim hourDayCnt(startH To endH, 1 To 500) As Long
+    Dim i7 As Long
+    For i7 = 1 To nRows
+        If data(i7, 1) = "着信" Then
+            Dim dt7 As Date: dt7 = ParseDT(data(i7, 4))
+            If dt7 = 0 Then GoTo NextRow7
+            If Int(dt7) < dtStart Or Int(dt7) > dtEnd Then GoTo NextRow7
+            If IsSelfCall(data(i7, 2), data(i7, 3)) Then GoTo NextRow7
+            If data(i7, 8) <> "応答" And data(i7, 8) <> "放棄呼" Then GoTo NextRow7
+            Dim dk7 As String: dk7 = Format(Int(dt7), "yyyy/mm/dd")
+            Dim di7 As Long: di7 = 0
+            Dim jj As Long
+            For jj = 1 To nDates
+                If dateKeys(jj) = dk7 Then di7 = jj: Exit For
+            Next jj
+            If di7 = 0 Then GoTo NextRow7
+            Dim hh7 As Long: hh7 = Hour(dt7)
+            If hh7 >= startH And hh7 <= endH Then
+                hourDayCnt(hh7, di7) = hourDayCnt(hh7, di7) + 1
+            End If
+        End If
+NextRow7:
+    Next i7
+
+    ReDim hourTotal(startH To endH) As Long
+    ReDim dayTotal(1 To 500) As Long
+    Dim grandTotal As Long: grandTotal = 0
+    Dim hx As Long, dx As Long
+    For hx = startH To endH
+        For dx = 1 To nDates
+            hourTotal(hx) = hourTotal(hx) + hourDayCnt(hx, dx)
+            dayTotal(dx) = dayTotal(dx) + hourDayCnt(hx, dx)
+            grandTotal = grandTotal + hourDayCnt(hx, dx)
+        Next dx
+    Next hx
+
+    Dim nCols7 As Long: nCols7 = 2 + nDates + 2
+    Call WriteSectionTitle(ws, outRow, 1, nCols7, _
+        "③ 時間別受電テーブル（応答＋放棄呼・除外行除く）", COL_LIGHT, False)
     outRow = outRow + 1
-    ws.Cells(outRow, 2).Value = "時間帯（5分枠）"
+    ws.Cells(outRow, 2).Value = "時間帯"
     ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
     ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
     ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
-    For di = 1 To nDates: ws.Cells(outRow, 2 + di).Value = dateKeys(di): Next di
-    Call StyleHeader(ws, outRow, 2 + nDates, False)
+    For dx = 1 To nDates
+        ws.Cells(outRow, 2 + dx).Value = dateKeys(dx)
+    Next dx
+    ws.Cells(outRow, 2 + nDates + 1).Value = "合計"
+    ws.Cells(outRow, 2 + nDates + 2).Value = "構成比"
+    Call StyleHeader(ws, outRow, nCols7, False)
     outRow = outRow + 1
 
-    ' 5分スロット生成
-    Dim tS As Date: tS = TimeValue(TIME_START)
-    Dim tE As Date: tE = TimeValue(TIME_END)
-    Dim nSlots As Long: nSlots = 0
-    Dim tt As Date: tt = tS
-    Do While tt <= tE: nSlots = nSlots + 1: tt = tt + TimeSerial(0, 5, 0): Loop
-    ReDim slotTimes2(1 To nSlots) As Date
-    tt = tS
-    Dim si As Long
-    For si = 1 To nSlots: slotTimes2(si) = tt: tt = tt + TimeSerial(0, 5, 0): Next si
-    If nDates = 0 Or nSlots = 0 Then GoTo SkipWaitSection
-    ReDim waitSum(1 To nSlots, 1 To nDates) As Double
-    ReDim waitCnt(1 To nSlots, 1 To nDates) As Long
-
-    For i = 1 To nRows
-        If data(i, 1) = "着信" Then
-            Dim ivrStr As String: ivrStr = data(i, 5)
-            If ivrStr = Chr(34) Or ivrStr = "" Then GoTo NextRow3
-            Dim ivrDT As Date: ivrDT = ParseDT(ivrStr)
-            Dim endDT3 As Date: endDT3 = ParseDT(data(i, 7))
-            If ivrDT = 0 Or endDT3 = 0 Or endDT3 <= ivrDT Then GoTo NextRow3
-            Dim recvDT3 As Date: recvDT3 = ParseDT(data(i, 4))
-            If recvDT3 = 0 Then GoTo NextRow3
-            Dim wSec As Double: wSec = (endDT3 - ivrDT) * 86400
-            Dim dk3 As String: dk3 = Format(Int(recvDT3), "yyyy/mm/dd")
-            Dim di3 As Long: di3 = 0
-            For j = 1 To nDates
-                If dateKeys(j) = dk3 Then di3 = j: Exit For
-            Next j
-            If di3 = 0 Then GoTo NextRow3
-            Dim recvTime As Date: recvTime = recvDT3 - Int(recvDT3)
-            Dim evMin2 As Long: evMin2 = Hour(recvTime) * 60 + Minute(recvTime)
-            Dim slotMin2 As Long: slotMin2 = (evMin2 \ 5) * 5
-            Dim slotT2 As Date: slotT2 = TimeSerial(slotMin2 \ 60, slotMin2 Mod 60, 0)
-            Dim fsi2 As Long: fsi2 = 0
-            For si = 1 To nSlots
-                If Abs(slotTimes2(si) - slotT2) < 0.00001 Then fsi2 = si: Exit For
-            Next si
-            If fsi2 > 0 Then
-                waitSum(fsi2, di3) = waitSum(fsi2, di3) + wSec
-                waitCnt(fsi2, di3) = waitCnt(fsi2, di3) + 1
-            End If
+    For hx = startH To endH
+        Dim shade7 As Boolean: shade7 = (outRow Mod 2 = 0)
+        Call StyleDataRow(ws, outRow, nCols7, shade7)
+        ws.Cells(outRow, 2).Value = Format(hx, "00") & ":00〜" & Format(hx, "00") & ":59"
+        ws.Cells(outRow, 2).HorizontalAlignment = xlLeft
+        For dx = 1 To nDates
+            ws.Cells(outRow, 2 + dx).Value = hourDayCnt(hx, dx)
+        Next dx
+        ws.Cells(outRow, 2 + nDates + 1).Value = hourTotal(hx)
+        ws.Cells(outRow, 2 + nDates + 1).Font.Bold = True
+        If grandTotal > 0 Then
+            ws.Cells(outRow, 2 + nDates + 2).Value = Format(hourTotal(hx) / grandTotal * 100, "0.0") & "%"
+        Else
+            ws.Cells(outRow, 2 + nDates + 2).Value = "-"
         End If
-NextRow3:
-    Next i
-
-    Dim si2 As Long
-    For si2 = 1 To nSlots
-        Dim anyVal As Boolean: anyVal = False
-        Dim di4 As Long
-        For di4 = 1 To nDates
-            If waitCnt(si2, di4) > 0 Then anyVal = True: Exit For
-        Next di4
-        If Not anyVal Then GoTo NextSlot
-        Dim tsStr As String
-        tsStr = Format(Hour(slotTimes2(si2)), "00") & ":" & Format(Minute(slotTimes2(si2)), "00")
-        Call StyleDataRow(ws, outRow, 2 + nDates, outRow Mod 2 = 0)
-        ws.Cells(outRow, 2).Value = tsStr
-        For di4 = 1 To nDates
-            If waitCnt(si2, di4) > 0 Then
-                ws.Cells(outRow, 2 + di4).Value = Format(waitSum(si2, di4) / waitCnt(si2, di4), "0")
-            Else
-                ws.Cells(outRow, 2 + di4).Value = "-"
-            End If
-        Next di4
         outRow = outRow + 1
-NextSlot:
-    Next si2
-    outRow = outRow + 1
+    Next hx
 
-SkipWaitSection:
-    ' ── ④ 日付別×午前午後件数 ───────────────────────
-    Call WriteSectionTitle(ws, outRow, 1, 5, _
-        "⑤ 日付別 × 時間帯（午前/午後）別 受電件数", COL_LIGHT, False)
-    outRow = outRow + 1
-    ws.Cells(outRow, 2).Value = "日付"
-    ws.Cells(outRow, 3).Value = "午前（〜11:59）"
-    ws.Cells(outRow, 4).Value = "午後（12:00〜）"
-    ws.Cells(outRow, 5).Value = "合計"
-    Call StyleHeader(ws, outRow, 5, False)
-    outRow = outRow + 1
-    ReDim amCnt(1 To 500) As Long
-    ReDim pmCnt(1 To 500) As Long
-    For i = 1 To nRows
-        If data(i, 1) = "着信" Then
-            Dim dt4 As Date: dt4 = ParseDT(data(i, 4))
-            If dt4 = 0 Then GoTo NextRow4
-            Dim dk4 As String: dk4 = Format(Int(dt4), "yyyy/mm/dd")
-            Dim di5 As Long: di5 = 0
-            For j = 1 To nDates
-                If dateKeys(j) = dk4 Then di5 = j: Exit For
-            Next j
-            If di5 = 0 Then GoTo NextRow4
-            If Hour(dt4) < 12 Then amCnt(di5) = amCnt(di5) + 1 Else pmCnt(di5) = pmCnt(di5) + 1
-        End If
-NextRow4:
-    Next i
-    For di = 1 To nDates
-        Call StyleDataRow(ws, outRow, 5, di Mod 2 = 0)
-        ws.Cells(outRow, 2).Value = dateKeys(di)
-        ws.Cells(outRow, 3).Value = amCnt(di)
-        ws.Cells(outRow, 4).Value = pmCnt(di)
-        ws.Cells(outRow, 5).Value = amCnt(di) + pmCnt(di)
-        outRow = outRow + 1
-    Next di
-    outRow = outRow + 1
+    ' 合計行
+    Call StyleDataRow(ws, outRow, nCols7, False)
+    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Interior.Color = COL_LIGHT
+    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Font.Bold = True
+    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Value = "合計"
+    For dx = 1 To nDates
+        ws.Cells(outRow, 2 + dx).Value = dayTotal(dx)
+    Next dx
+    ws.Cells(outRow, 2 + nDates + 1).Value = grandTotal
+    ws.Cells(outRow, 2 + nDates + 2).Value = "100.0%"
+    ws.Rows(outRow).RowHeight = 20
+    outRow = outRow + 2
 
-    ws.Columns("B:B").ColumnWidth = 16
-    ws.Columns("C:C").ColumnWidth = 14
-    ws.Columns("D:D").ColumnWidth = 14
-
-    ' ── ③-2 日別 総対応時間（着信・発信） ───────────────
+    ' ── ④ 日別 総対応時間 ────────────────────────────
     Call WriteSectionTitle(ws, outRow, 1, 4, _
-        "③-2 日別 総対応時間（G列－F列）", COL_LIGHT, False)
+        "④ 日別 総対応時間（G列－F列）", COL_LIGHT, False)
     outRow = outRow + 1
     ws.Cells(outRow, 2).Value = "日付"
     ws.Cells(outRow, 3).Value = "着信 総対応時間"
@@ -1267,102 +1229,96 @@ NextRow6:
     Next di6
     outRow = outRow + 1
 
-    ' ── ⑦ 時間別受電テーブル ──────────────────────────
-    Dim startH As Long: startH = Hour(TimeValue(TIME_START))
-    Dim endH   As Long: endH   = Hour(TimeValue(TIME_END))
-    Dim nHours As Long: nHours = endH - startH + 1
-
-    ' 時間帯×日付の件数集計
-    ReDim hourDayCnt(startH To endH, 1 To 500) As Long
-    Dim i7 As Long
-    For i7 = 1 To nRows
-        If data(i7, 1) = "着信" Then
-            Dim dt7 As Date: dt7 = ParseDT(data(i7, 4))
-            If dt7 = 0 Then GoTo NextRow7
-            If Int(dt7) < dtStart Or Int(dt7) > dtEnd Then GoTo NextRow7
-            If IsSelfCall(data(i7, 2), data(i7, 3)) Then GoTo NextRow7
-            Dim dk7 As String: dk7 = Format(Int(dt7), "yyyy/mm/dd")
-            Dim di7 As Long: di7 = 0
-            Dim jj As Long
-            For jj = 1 To nDates
-                If dateKeys(jj) = dk7 Then di7 = jj: Exit For
-            Next jj
-            If di7 = 0 Then GoTo NextRow7
-            Dim hh7 As Long: hh7 = Hour(dt7)
-            If hh7 >= startH And hh7 <= endH Then
-                hourDayCnt(hh7, di7) = hourDayCnt(hh7, di7) + 1
-            End If
-        End If
-NextRow7:
-    Next i7
-
-    ' 合計計算
-    ReDim hourTotal(startH To endH) As Long   ' 時間帯別合計
-    ReDim dayTotal(1 To 500) As Long           ' 日付別合計
-    Dim grandTotal As Long: grandTotal = 0
-    Dim hx As Long, dx As Long
-    For hx = startH To endH
-        For dx = 1 To nDates
-            hourTotal(hx) = hourTotal(hx) + hourDayCnt(hx, dx)
-            dayTotal(dx) = dayTotal(dx) + hourDayCnt(hx, dx)
-            grandTotal = grandTotal + hourDayCnt(hx, dx)
-        Next dx
-    Next hx
-
-    ' ヘッダー出力
-    Dim nCols7 As Long: nCols7 = 2 + nDates + 2  ' B=時間帯, C〜=日付, 合計, %
-    Call WriteSectionTitle(ws, outRow, 1, nCols7, _
-        "⑦ 時間別受電テーブル（着信件数・除外行除く）", COL_LIGHT, False)
+    ' ── ⑤ 時間帯別 対応時間（平均秒） ──────────────────
+    Call WriteSectionTitle(ws, outRow, 1, 2 + nDates, _
+        "⑤ 時間帯別 対応時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
+        COL_LIGHT, False)
     outRow = outRow + 1
-
-    ws.Cells(outRow, 2).Value = "時間帯"
+    ws.Cells(outRow, 2).Value = "時間帯（5分枠）"
     ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
     ws.Cells(outRow, 2).Font.Bold = True
     ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
     ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
-    For dx = 1 To nDates
-        ws.Cells(outRow, 2 + dx).Value = dateKeys(dx)
-    Next dx
-    ws.Cells(outRow, 2 + nDates + 1).Value = "合計"
-    ws.Cells(outRow, 2 + nDates + 2).Value = "構成比"
-    Call StyleHeader(ws, outRow, nCols7, False)
+    For di = 1 To nDates: ws.Cells(outRow, 2 + di).Value = dateKeys(di): Next di
+    Call StyleHeader(ws, outRow, 2 + nDates, False)
     outRow = outRow + 1
 
-    ' データ行出力
-    For hx = startH To endH
-        Dim shade7 As Boolean: shade7 = (outRow Mod 2 = 0)
-        Call StyleDataRow(ws, outRow, nCols7, shade7)
-        ws.Cells(outRow, 2).Value = Format(hx, "00") & ":00〜" & Format(hx, "00") & ":59"
-        ws.Cells(outRow, 2).HorizontalAlignment = xlLeft
-        For dx = 1 To nDates
-            ws.Cells(outRow, 2 + dx).Value = hourDayCnt(hx, dx)
-        Next dx
-        ws.Cells(outRow, 2 + nDates + 1).Value = hourTotal(hx)
-        ws.Cells(outRow, 2 + nDates + 1).Font.Bold = True
-        If grandTotal > 0 Then
-            ws.Cells(outRow, 2 + nDates + 2).Value = Format(hourTotal(hx) / grandTotal * 100, "0.0") & "%"
-        Else
-            ws.Cells(outRow, 2 + nDates + 2).Value = "-"
-        End If
-        outRow = outRow + 1
-    Next hx
+    Dim tS As Date: tS = TimeValue(TIME_START)
+    Dim tE As Date: tE = TimeValue(TIME_END)
+    Dim nSlots As Long: nSlots = 0
+    Dim tt As Date: tt = tS
+    Do While tt <= tE: nSlots = nSlots + 1: tt = tt + TimeSerial(0, 5, 0): Loop
+    ReDim slotTimes2(1 To nSlots) As Date
+    tt = tS
+    Dim si As Long
+    For si = 1 To nSlots: slotTimes2(si) = tt: tt = tt + TimeSerial(0, 5, 0): Next si
 
-    ' 合計行
-    Call StyleDataRow(ws, outRow, nCols7, False)
-    ws.Cells(outRow, 2).Value = "合計"
-    ws.Cells(outRow, 2).Font.Bold = True
-    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Interior.Color = COL_LIGHT
-    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Font.Bold = True
-    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Font.Color = RGB(0, 0, 0)
-    For dx = 1 To nDates
-        ws.Cells(outRow, 2 + dx).Value = dayTotal(dx)
-    Next dx
-    ws.Cells(outRow, 2 + nDates + 1).Value = grandTotal
-    ws.Cells(outRow, 2 + nDates + 2).Value = "100.0%"
-    ws.Rows(outRow).RowHeight = 20
-    outRow = outRow + 1
+    If nDates > 0 And nSlots > 0 Then
+        ReDim waitSum(1 To nSlots, 1 To nDates) As Double
+        ReDim waitCnt(1 To nSlots, 1 To nDates) As Long
+        For i = 1 To nRows
+            If data(i, 1) = "着信" Then
+                Dim ivrStr As String: ivrStr = data(i, 5)
+                If ivrStr = Chr(34) Or ivrStr = "" Then GoTo NextRow3
+                Dim ivrDT As Date: ivrDT = ParseDT(ivrStr)
+                Dim endDT3 As Date: endDT3 = ParseDT(data(i, 7))
+                If ivrDT = 0 Or endDT3 = 0 Or endDT3 <= ivrDT Then GoTo NextRow3
+                Dim recvDT3 As Date: recvDT3 = ParseDT(data(i, 4))
+                If recvDT3 = 0 Then GoTo NextRow3
+                Dim recvD3 As Date: recvD3 = Int(recvDT3)
+                If recvD3 < dtStart Or recvD3 > dtEnd Then GoTo NextRow3
+                Dim wSec As Double: wSec = (endDT3 - ivrDT) * 86400
+                Dim dk3 As String: dk3 = Format(recvD3, "yyyy/mm/dd")
+                Dim di3 As Long: di3 = 0
+                For j = 1 To nDates
+                    If dateKeys(j) = dk3 Then di3 = j: Exit For
+                Next j
+                If di3 = 0 Then GoTo NextRow3
+                Dim recvTime As Date: recvTime = recvDT3 - Int(recvDT3)
+                Dim evMin2 As Long: evMin2 = Hour(recvTime) * 60 + Minute(recvTime)
+                Dim slotMin2 As Long: slotMin2 = (evMin2 \ 5) * 5
+                Dim slotT2 As Date: slotT2 = TimeSerial(slotMin2 \ 60, slotMin2 Mod 60, 0)
+                Dim fsi2 As Long: fsi2 = 0
+                For si = 1 To nSlots
+                    If Abs(slotTimes2(si) - slotT2) < 0.00001 Then fsi2 = si: Exit For
+                Next si
+                If fsi2 > 0 Then
+                    waitSum(fsi2, di3) = waitSum(fsi2, di3) + wSec
+                    waitCnt(fsi2, di3) = waitCnt(fsi2, di3) + 1
+                End If
+            End If
+NextRow3:
+        Next i
 
+        Dim si2 As Long
+        For si2 = 1 To nSlots
+            Dim anyVal As Boolean: anyVal = False
+            Dim di4 As Long
+            For di4 = 1 To nDates
+                If waitCnt(si2, di4) > 0 Then anyVal = True: Exit For
+            Next di4
+            If Not anyVal Then GoTo NextSlot
+            Dim tsStr As String
+            tsStr = Format(Hour(slotTimes2(si2)), "00") & ":" & Format(Minute(slotTimes2(si2)), "00")
+            Call StyleDataRow(ws, outRow, 2 + nDates, outRow Mod 2 = 0)
+            ws.Cells(outRow, 2).Value = tsStr
+            For di4 = 1 To nDates
+                If waitCnt(si2, di4) > 0 Then
+                    ws.Cells(outRow, 2 + di4).Value = Format(waitSum(si2, di4) / waitCnt(si2, di4), "0")
+                Else
+                    ws.Cells(outRow, 2 + di4).Value = "-"
+                End If
+            Next di4
+            outRow = outRow + 1
+NextSlot:
+        Next si2
+    End If
+
+    ws.Columns("B:B").ColumnWidth = 20
+    ws.Columns("C:C").ColumnWidth = 16
+    ws.Columns("D:D").ColumnWidth = 16
 End Sub
+
 
 ' ============================================================
 ' 処理⑤：傾向分析サマリー
