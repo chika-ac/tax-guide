@@ -1,1 +1,1 @@
-Debug.Print AscW(Mid(ThisWorkbook.Sheets("Data").Cells(10, 12).Value, 1, 1))
+Debug.Print InStr(ThisWorkbook.Sheets("Data").Cells(10, 12).Value, ChrW(8595))
