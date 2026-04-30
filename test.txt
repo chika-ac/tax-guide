@@ -1,48 +1,9 @@
-Function MaskText(text As String, maskChar As String) As String
-    Dim re As Object
-    Dim result As String
-    result = text
+' ↓がない行は無視
+        If InStr(memo, Chr(8595)) = 0 Then GoTo NextRow
 
-    Set re = CreateObject("VBScript.RegExp")
-    re.Global = True
-    re.IgnoreCase = True
-    re.MultiLine = False
-
-    ' 署名欄マスク：区切り文字で両側を囲まれた部分
-    re.Pattern = "(-{3,}|_{3,}|\*{3,})((.|\n)*?)(-{3,}|_{3,}|\*{3,})"
-    result = re.Replace(result, maskChar)
-
-    ' 署名欄マスク：区切り文字が開始のみのケース（それ以降末尾まで）
-    re.Pattern = "(-{3,}|_{3,}|\*{3,})((.|\n)*)"
-    result = re.Replace(result, maskChar)
-
-    ' 申請番号（12桁）
-    re.Pattern = "(^|[^\d])\d{12}([^\d]|$)"
-    result = re.Replace(result, "$1" & maskChar & "$2")
-
-    ' 職員番号（7〜8桁）
-    re.Pattern = "(^|[^\d])\d{7,8}([^\d]|$)"
-    result = re.Replace(result, "$1" & maskChar & "$2")
-
-    ' 氏名＋敬称（様・さま・サマ・さん）
-    re.Pattern = "[^\s\n]{1,10}(" & ChrW(27096) & "|" & ChrW(12373) & ChrW(12414) & "|" & ChrW(12469) & ChrW(12510) & "|" & ChrW(12373) & ChrW(12435) & ")"
-    result = re.Replace(result, maskChar)
-
-    ' 年収（円・えん）
-    re.Pattern = "\d[\d,]*(" & ChrW(20870) & "|" & ChrW(12360) & ChrW(12435) & ")"
-    result = re.Replace(result, maskChar)
-
-    ' 年収（¥記号）
-    re.Pattern = ChrW(165) & "[\d,]+"
-    result = re.Replace(result, maskChar)
-
-    ' 電話番号（XX-XXXX-XXXX形式）
-    re.Pattern = "\d{2,4}-\d{2,4}-\d{3,4}"
-    result = re.Replace(result, maskChar)
-
-    ' メールアドレス
-    re.Pattern = "[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
-    result = re.Replace(result, maskChar)
-
-    MaskText = result
-End Function
+        ' 改行+↓+改行 で分割、なければ↓のみで分割
+        If InStr(memo, Chr(10) & Chr(8595) & Chr(10)) > 0 Then
+            parts = Split(memo, Chr(10) & Chr(8595) & Chr(10))
+        Else
+            parts = Split(memo, Chr(8595))
+        End If
