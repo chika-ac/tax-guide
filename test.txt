@@ -1,3 +1,43 @@
-Dim msg As String
-    msg = rowNum - 3 & " 件のデータをインポートしました。"
-    MsgBox msg
+Sub RunMask()
+    Dim wsSrc As Worksheet
+    Dim wsMask As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim j As Integer
+    Dim cellVal As String
+    Dim maskChar As String
+
+    Set wsSrc = ThisWorkbook.Sheets("元データ")
+    Set wsMask = ThisWorkbook.Sheets("マスク済データ")
+    maskChar = "●●"
+
+    lastRow = wsSrc.Cells(wsSrc.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 3 Then
+        MsgBox "元データが見つかりません。"
+        Exit Sub
+    End If
+
+    Dim lastRow2 As Long
+    lastRow2 = wsMask.Cells(wsMask.Rows.Count, 1).End(xlUp).Row
+    If lastRow2 > 2 Then
+        wsMask.Rows("3:" & lastRow2).ClearContents
+    End If
+
+    Application.ScreenUpdating = False
+
+    For i = 3 To lastRow
+        For j = 1 To 23
+            cellVal = CStr(wsSrc.Cells(i, j).Value)
+            cellVal = MaskText(cellVal, maskChar)
+            wsMask.Cells(i, j).Value = cellVal
+            wsMask.Cells(i, j).Font.Name = "Arial"
+            wsMask.Cells(i, j).Font.Size = 9
+        Next j
+    Next i
+
+    Application.ScreenUpdating = True
+
+    Dim msg2 As String
+    msg2 = lastRow - 2 & " 件のマスク処理が完了しました。"
+    MsgBox msg2
+End Sub
