@@ -1,7 +1,1 @@
-' 申請番号（12桁）
-    re.Pattern = "(^|[^\d])\d{12}([^\d]|$)"
-    result = re.Replace(result, "$1" & maskChar & "$2")
-
-    ' 職員番号（7〜8桁）
-    re.Pattern = "(^|[^\d])\d{7,8}([^\d]|$)"
-    result = re.Replace(result, "$1" & maskChar & "$2")
+Debug.Print MaskText("ご確認ください。" & Chr(10) & "---" & Chr(10) & "田中太郎" & Chr(10) & "○○課" & Chr(10) & "---" & Chr(10) & "よろしくお願いします。", "**")
