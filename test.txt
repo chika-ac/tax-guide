@@ -1,17 +1,23 @@
-Attribute VB_Name = "FAQ育成ツール_v02"
+Attribute VB_Name = "FAQ_Tool_v04"
 ' ================================================================
-'  FAQ育成ツール VBAモジュール ver0.2
-'  2026年4月
+'  FAQ育成ツール VBAモジュール ver0.4
 '
 '  【インポート手順】
 '  1. VBAエディタを開く（Alt+F11）
-'  2. メニュー：ファイル → ファイルのインポート
-'  3. このファイル（FAQ育成ツール_v02.bas）を選択
-'  4. 操作パネルの各ボタンにマクロを登録する
+'  2. 古いモジュールがあれば右クリック→解放で削除する
+'  3. メニュー：ファイル → ファイルのインポート
+'  4. このファイル（FAQ育成ツール_v04.bas）を選択する
+'  5. 操作パネルの各ボタンにマクロを登録する
 '     STEP1ボタン → ImportCSV
 '     STEP2ボタン → RunMask
 '     STEP3ボタン → RunSplit
 '     STEP4ボタン → ExportCSV
+'
+'  【事前準備：シート名を以下に変更してください】
+'  元データ    → Data
+'  マスク済データ → Masked
+'  分割済データ  → Split
+'  設定        → Config
 ' ================================================================
 
 Option Explicit
@@ -29,12 +35,11 @@ Sub ImportCSV()
     Dim isFirst As Boolean
     Dim i As Integer
     Dim lastRow As Long
-    Dim msg As String
 
     fPath = Application.GetOpenFilename("CSV," & Chr(42) & ".csv")
     If VarType(fPath) = vbBoolean Then Exit Sub
 
-    Set ws = ThisWorkbook.Sheets(Chr(20803) & Chr(12487) & Chr(12540) & Chr(12479))
+    Set ws = ThisWorkbook.Sheets("Data")
 
     lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
     If lastRow > 2 Then
@@ -67,8 +72,7 @@ Sub ImportCSV()
 
     Close #fNum
 
-    msg = rowNum - 3 & " " & Chr(20855) & Chr(12398) & Chr(12487) & Chr(12540) & Chr(12479) & Chr(12434) & Chr(12452) & Chr(12531) & Chr(12509) & Chr(12540) & Chr(12488) & Chr(12375) & Chr(12414) & Chr(12375) & Chr(12383) & Chr(12290)
-    MsgBox msg
+    MsgBox rowNum - 3 & " ken no data wo import shimashita."
 End Sub
 
 ' ----------------------------------------------------------------
@@ -121,15 +125,14 @@ Sub RunMask()
     Dim j As Integer
     Dim cellVal As String
     Dim maskChar As String
-    Dim msg2 As String
 
-    Set wsSrc = ThisWorkbook.Sheets(Chr(20803) & Chr(12487) & Chr(12540) & Chr(12479))
-    Set wsMask = ThisWorkbook.Sheets(Chr(12510) & Chr(12473) & Chr(12463) & Chr(28168) & Chr(12487) & Chr(12540) & Chr(12479))
-    maskChar = Chr(9679) & Chr(9679)
+    Set wsSrc = ThisWorkbook.Sheets("Data")
+    Set wsMask = ThisWorkbook.Sheets("Masked")
+    maskChar = "**"
 
     lastRow = wsSrc.Cells(wsSrc.Rows.Count, 1).End(xlUp).Row
     If lastRow < 3 Then
-        MsgBox Chr(20803) & Chr(12487) & Chr(12540) & Chr(12479) & Chr(12364) & Chr(35211) & Chr(35211) & Chr(12354) & Chr(12426) & Chr(12414) & Chr(12379) & Chr(12435) & Chr(12290)
+        MsgBox "Error: No data in Data sheet. Please import CSV first."
         Exit Sub
     End If
 
@@ -152,8 +155,7 @@ Sub RunMask()
 
     Application.ScreenUpdating = True
 
-    msg2 = lastRow - 2 & " " & Chr(20855) & Chr(12398) & Chr(12510) & Chr(12473) & Chr(12463) & Chr(20966) & Chr(29702) & Chr(12364) & Chr(23436) & Chr(20102) & Chr(12375) & Chr(12414) & Chr(12375) & Chr(12383) & Chr(12290)
-    MsgBox msg2
+    MsgBox lastRow - 2 & " ken no mask shori ga kanryo shimashita."
 End Sub
 
 ' ----------------------------------------------------------------
@@ -176,16 +178,16 @@ Function MaskText(text As String, maskChar As String) As String
     re.Pattern = "\b\d{7,8}\b"
     result = re.Replace(result, maskChar)
 
-    ' 氏名＋敬称
-    re.Pattern = "[^\s\n]{1,10}(" & Chr(27096) & "|" & Chr(12373) & Chr(12414) & "|" & Chr(12469) & Chr(12510) & "|" & Chr(12373) & Chr(12435) & ")"
+    ' 氏名＋敬称（様・さま・サマ・さん）
+    re.Pattern = "[^\s\n]{1,10}(" & ChrW(27096) & "|" & ChrW(12373) & ChrW(12414) & "|" & ChrW(12469) & ChrW(12510) & "|" & ChrW(12373) & ChrW(12435) & ")"
     result = re.Replace(result, maskChar)
 
     ' 年収（円・えん）
-    re.Pattern = "\d[\d,]*(" & Chr(20870) & "|" & Chr(12360) & Chr(12435) & ")"
+    re.Pattern = "\d[\d,]*(" & ChrW(20870) & "|" & ChrW(12360) & ChrW(12435) & ")"
     result = re.Replace(result, maskChar)
 
     ' 年収（¥記号）
-    re.Pattern = Chr(165) & "[\d,]+"
+    re.Pattern = ChrW(165) & "[\d,]+"
     result = re.Replace(result, maskChar)
 
     MaskText = result
@@ -198,6 +200,7 @@ Sub RunSplit()
     Dim wsMask As Worksheet
     Dim wsSplit As Worksheet
     Dim lastRow As Long
+    Dim lastRow3 As Long
     Dim i As Long
     Dim outRow As Long
     Dim j As Integer
@@ -212,18 +215,21 @@ Sub RunSplit()
     Dim startIdx As Integer
     Dim lastIdx As Integer
     Dim adjustedLast As Integer
-    Dim msg3 As String
+    Dim roleOP As String
+    Dim roleCL As String
 
-    Set wsMask = ThisWorkbook.Sheets(Chr(12510) & Chr(12473) & Chr(12463) & Chr(28168) & Chr(12487) & Chr(12540) & Chr(12479))
-    Set wsSplit = ThisWorkbook.Sheets(Chr(20998) & Chr(21106) & Chr(28168) & Chr(12487) & Chr(12540) & Chr(12479))
+    Set wsMask = ThisWorkbook.Sheets("Masked")
+    Set wsSplit = ThisWorkbook.Sheets("Split")
+
+    roleOP = "OP"
+    roleCL = "CL"
 
     lastRow = wsMask.Cells(wsMask.Rows.Count, 1).End(xlUp).Row
     If lastRow < 3 Then
-        MsgBox Chr(12510) & Chr(12473) & Chr(12463) & Chr(28168) & Chr(12487) & Chr(12540) & Chr(12479) & Chr(12364) & Chr(35211) & Chr(35211) & Chr(12354) & Chr(12426) & Chr(12414) & Chr(12379) & Chr(12435) & Chr(12290)
+        MsgBox "Error: No data in Masked sheet. Please run mask first."
         Exit Sub
     End If
 
-    Dim lastRow3 As Long
     lastRow3 = wsSplit.Cells(wsSplit.Rows.Count, 1).End(xlUp).Row
     If lastRow3 > 2 Then
         wsSplit.Rows("3:" & lastRow3).ClearContents
@@ -243,32 +249,37 @@ Sub RunSplit()
             parts = Split(memo, Chr(8595))
         End If
 
-        ' 連携発信チェック
-        isRenraku = (InStr(parts(0), Chr(36899) & Chr(25345) & Chr(30330) & Chr(20449)) > 0)
+        ' 連携発信チェック（最初の発言にあればOPが先）
+        isRenraku = (InStr(parts(0), ChrW(36899) & ChrW(25345) & ChrW(30330) & ChrW(20449)) > 0)
 
         pairNum = 1
 
         For j = 0 To UBound(parts) - 1
+
+            ' 連携発信ありの場合、最初のペア(j=0)はスキップ
             If isRenraku And j = 0 Then GoTo NextPair
 
             sp1 = Trim(parts(j))
             sp2 = Trim(parts(j + 1))
 
+            ' 発言者判定
             If isRenraku Then
+                ' OP→CL→OP→CL...（j=0がOP）
                 If j Mod 2 = 0 Then
-                    role1 = Chr(12458) & Chr(12506) & Chr(12524) & Chr(12540) & Chr(12479) & Chr(12540)
-                    role2 = Chr(12463) & Chr(12521) & Chr(12452) & Chr(12450) & Chr(12531) & Chr(12488)
+                    role1 = roleOP
+                    role2 = roleCL
                 Else
-                    role1 = Chr(12463) & Chr(12521) & Chr(12452) & Chr(12450) & Chr(12531) & Chr(12488)
-                    role2 = Chr(12458) & Chr(12506) & Chr(12524) & Chr(12540) & Chr(12479) & Chr(12540)
+                    role1 = roleCL
+                    role2 = roleOP
                 End If
             Else
+                ' CL→OP→CL→OP...（j=0がCL）
                 If j Mod 2 = 0 Then
-                    role1 = Chr(12463) & Chr(12521) & Chr(12452) & Chr(12450) & Chr(12531) & Chr(12488)
-                    role2 = Chr(12458) & Chr(12506) & Chr(12524) & Chr(12540) & Chr(12479) & Chr(12540)
+                    role1 = roleCL
+                    role2 = roleOP
                 Else
-                    role1 = Chr(12458) & Chr(12506) & Chr(12524) & Chr(12540) & Chr(12479) & Chr(12540)
-                    role2 = Chr(12463) & Chr(12521) & Chr(12452) & Chr(12450) & Chr(12531) & Chr(12488)
+                    role1 = roleOP
+                    role2 = roleCL
                 End If
             End If
 
@@ -300,15 +311,15 @@ NextPair:
             sp1 = Trim(parts(lastIdx))
             If isRenraku Then
                 If lastIdx Mod 2 = 0 Then
-                    role1 = Chr(12458) & Chr(12506) & Chr(12524) & Chr(12540) & Chr(12479) & Chr(12540)
+                    role1 = roleOP
                 Else
-                    role1 = Chr(12463) & Chr(12521) & Chr(12452) & Chr(12450) & Chr(12531) & Chr(12488)
+                    role1 = roleCL
                 End If
             Else
                 If lastIdx Mod 2 = 0 Then
-                    role1 = Chr(12463) & Chr(12521) & Chr(12452) & Chr(12450) & Chr(12531) & Chr(12488)
+                    role1 = roleCL
                 Else
-                    role1 = Chr(12458) & Chr(12506) & Chr(12524) & Chr(12540) & Chr(12479) & Chr(12540)
+                    role1 = roleOP
                 End If
             End If
 
@@ -331,8 +342,7 @@ NextRow:
 
     Application.ScreenUpdating = True
 
-    msg3 = outRow - 3 & " " & Chr(20855) & Chr(12398) & Chr(30330) & Chr(35328) & Chr(12506) & Chr(12450) & Chr(12434) & Chr(29983) & Chr(25104) & Chr(12375) & Chr(12414) & Chr(12375) & Chr(12383) & Chr(12290)
-    MsgBox msg3
+    MsgBox outRow - 3 & " ken no bunkatsu ga kanryo shimashita."
 End Sub
 
 ' ----------------------------------------------------------------
@@ -347,25 +357,25 @@ Sub ExportCSV()
     Dim j As Integer
     Dim line As String
     Dim val As String
-    Dim msg4 As String
 
-    Set ws = ThisWorkbook.Sheets(Chr(20998) & Chr(21106) & Chr(28168) & Chr(12487) & Chr(12540) & Chr(12479))
+    Set ws = ThisWorkbook.Sheets("Split")
 
     lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
     If lastRow < 3 Then
-        MsgBox Chr(20998) & Chr(21106) & Chr(28168) & Chr(12487) & Chr(12540) & Chr(12479) & Chr(12364) & Chr(35211) & Chr(35211) & Chr(12354) & Chr(12426) & Chr(12414) & Chr(12379) & Chr(12435) & Chr(12290)
+        MsgBox "Error: No data in Split sheet. Please run split first."
         Exit Sub
     End If
 
     fPath = Application.GetSaveAsFilename( _
-        InitialFileName:="FAQ" & Chr(36865) & Chr(20184) & Chr(29992) & "_" & Format(Now, "YYYYMMDD") & ".csv", _
+        InitialFileName:="FAQ_" & Format(Now, "YYYYMMDD") & ".csv", _
         FileFilter:="CSV," & Chr(42) & ".csv")
     If VarType(fPath) = vbBoolean Then Exit Sub
 
     fNum = FreeFile
     Open fPath For Output As #fNum
 
-    Print #fNum, Chr(21839) & Chr(21512) & Chr(12379) & Chr(30058) & Chr(21495) & Chr(44) & Chr(26989) & Chr(21153) & Chr(20998) & Chr(39006) & Chr(35443) & Chr(32048) & Chr(44) & Chr(30330) & Chr(35328) & Chr(30058) & Chr(21495) & Chr(44) & Chr(30330) & Chr(35328) & Chr(32773) & Chr(9312) & Chr(44) & Chr(30330) & Chr(35328) & Chr(20869) & Chr(23481) & Chr(9312) & Chr(44) & Chr(30330) & Chr(35328) & Chr(32773) & Chr(9313) & Chr(44) & Chr(30330) & Chr(35328) & Chr(20869) & Chr(23481) & Chr(9313)
+    ' ヘッダー行
+    Print #fNum, "ID,Category,PairNo,Role1,Text1,Role2,Text2"
 
     For i = 3 To lastRow
         line = ""
@@ -386,6 +396,5 @@ Sub ExportCSV()
 
     Close #fNum
 
-    msg4 = "CSV" & Chr(12434) & Chr(20445) & Chr(23384) & Chr(12375) & Chr(12414) & Chr(12375) & Chr(12383) & Chr(12290)
-    MsgBox msg4
+    MsgBox "CSV wo hozon shimashita."
 End Sub
