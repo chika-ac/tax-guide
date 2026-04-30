@@ -1,5 +1,3 @@
-Dim lastRow As Long
-    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If lastRow > 2 Then
-        ws.Rows("3:" & lastRow).ClearContents
-    End If
+Dim msg As String
+    msg = rowNum - 3 & " 件のデータをインポートしました。"
+    MsgBox msg
