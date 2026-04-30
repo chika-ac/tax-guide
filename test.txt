@@ -1,7 +1,5 @@
-Debug.Print ThisWorkbook.Sheets("Masked").Cells(ThisWorkbook.Sheets("Masked").Rows.Count, 1).End(xlUp).Row
+Debug.Print InStr(ThisWorkbook.Sheets("Masked").Cells(3, 12).Value, Chr(8595))
 
+Debug.Print InStr(ThisWorkbook.Sheets("Masked").Cells(4, 12).Value, Chr(8595))
 
-Dim i As Long
-For i = 3 To 10
-    Debug.Print i & ": " & Left(ThisWorkbook.Sheets("Masked").Cells(i, 12).Value, 30) & " / instr=" & InStr(ThisWorkbook.Sheets("Masked").Cells(i, 12).Value, Chr(8595))
-Next i
+Debug.Print InStr(ThisWorkbook.Sheets("Masked").Cells(5, 12).Value, Chr(8595))
