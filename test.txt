@@ -1,8 +1,44 @@
-Dim ws As Worksheet
-Set ws = ThisWorkbook.Sheets("Masked")
-Debug.Print ws.Cells(3, 12).Value
+' 列単位でまるごとマスクする列番号
+    Dim maskCols(9) As Integer
+    maskCols(0) = 3   ' 受付担当①
+    maskCols(1) = 4   ' 受付担当②
+    maskCols(2) = 5   ' 受付担当③
+    maskCols(3) = 6   ' 受付担当④
+    maskCols(4) = 7   ' 受付担当⑤
+    maskCols(5) = 11  ' 職員名（カナ）
+    maskCols(6) = 17  ' 職員番号
+    maskCols(7) = 18  ' 職員名（漢字）
+    maskCols(8) = 19  ' 登録者
+    maskCols(9) = 20  ' 更新者
 
+    Dim k As Integer
+    Dim isMaskCol As Boolean
 
+    For i = 3 To lastRow
+        For j = 1 To 23
+            cellVal = CStr(wsSrc.Cells(i, j).Value)
 
+            ' 列単位マスク判定
+            isMaskCol = False
+            For k = 0 To 9
+                If j = maskCols(k) Then
+                    isMaskCol = True
+                    Exit For
+                End If
+            Next k
 
-Debug.Print MaskText("田中さんから920299番に連絡", "**")
+            If isMaskCol Then
+                ' 値があればまるごとマスク
+                If Trim(cellVal) <> "" Then
+                    cellVal = maskChar
+                End If
+            Else
+                ' 正規表現マスク（業務用メモ等）
+                cellVal = MaskText(cellVal, maskChar)
+            End If
+
+            wsMask.Cells(i, j).Value = cellVal
+            wsMask.Cells(i, j).Font.Name = "Arial"
+            wsMask.Cells(i, j).Font.Size = 9
+        Next j
+    Next i
