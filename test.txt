@@ -1,9 +1,7 @@
-' ↓がない行は無視
-        If InStr(memo, Chr(8595)) = 0 Then GoTo NextRow
+Debug.Print ThisWorkbook.Sheets("Masked").Cells(ThisWorkbook.Sheets("Masked").Rows.Count, 1).End(xlUp).Row
 
-        ' 改行+↓+改行 で分割、なければ↓のみで分割
-        If InStr(memo, Chr(10) & Chr(8595) & Chr(10)) > 0 Then
-            parts = Split(memo, Chr(10) & Chr(8595) & Chr(10))
-        Else
-            parts = Split(memo, Chr(8595))
-        End If
+
+Dim i As Long
+For i = 3 To 10
+    Debug.Print i & ": " & Left(ThisWorkbook.Sheets("Masked").Cells(i, 12).Value, 30) & " / instr=" & InStr(ThisWorkbook.Sheets("Masked").Cells(i, 12).Value, Chr(8595))
+Next i
