@@ -1,157 +1,224 @@
-以下のCSVは、ヘルプデスクへの問合せ履歴を会話ペア単位に分割したものです。個人情報はすでに**でマスク済みです。
-思考過程は出力せず、最終的なCSVのみを出力してください。
-CSVのカラムは以下の通りです：
-・ID：問合せ番号
-・Category：業務分類詳細
-・PairNo：会話ペア番号
-・Role1：CL（クライアント）またはOP（オペレーター）
-・Text1：Role1の発言内容
-・Role2：CL（クライアント）またはOP（オペレーター）
-・Text2：Role2の発言内容
-・CLの発言が質問、OPの発言が回答となります
-・Role2が空欄の行は回答なしの記録です
-あなたはFAQ作成と品質管理を行う担当です。全行を処理し、1つのCSVにまとめて出力してください。各行についてSTEP1〜4を実施し、最終的にCSV形式で出力してください。
-STEP1：FAQ生成
-会話ログからFAQを作成してください。
-ルール：
-・顧客の主な質問を1つに要約する
-・回答は簡潔かつ実務で使える内容にする
-・不明な情報は推測せず「不明」と記載する
-・不要な挨拶や雑談は除外する
-・推測や曖昧表現（たぶん・おそらく・〜と思われます）は使用禁止
-・**はマスク済み個人情報のため含めないこと
-STEP2：自己レビュー
-作成したFAQについて以下をチェックしてください：
-①質問が1つに特定できるか
-②回答が質問に直接答えているか
-③行動に必要な情報が含まれているか（手順・条件・担当者・期限のいずれか）
-④推測や曖昧表現が含まれていないか
-⑤たぶん・おそらく・〜と思われます　が含まれていないか
-不足や問題があれば指摘すること
-STEP3：改善
-STEP2の指摘をもとにFAQを改善してください。
-※不明な情報は無理に補完しない
-STEP4：信頼度判定
-以下の基準で判定：
-・高：すべて満たしており、そのまま利用可能
-・中：一部不足があるが軽微な修正で利用可能（要確認）
-・低：質問や回答が成立していない、または情報不足（使用不可）
-最終出力ルール：
-・出力はCSV形式のみ。説明文・前置き・補足は一切不要
-・最初の行は必ず以下のヘッダー行にすること
-"分類","Q","A","キーワード","信頼度"
-・2行目以降はデータ行とすること
-・各フィールドは必ずダブルクォートで囲むこと
-・全行を処理し1つのCSVにまとめて出力すること
-・複数行で同じ内容の問合せはまとめて1つのFAQにすること
-・Role2が空欄の行はQのみ作成しAは「回答未記録」、信頼度は「低」とすること
-各フィールドのルール：
-・分類：CSVのCategory列の値をそのまま使用すること
-・Q：職員目線の口語で「〜したい」または「〜について教えてください」の形式にすること
-・A：STEP3の改善後FAQの回答を使用すること。オペレーターが電話口でそのまま読み上げられる口語文にすること。箇条書き・番号・記号は使わず一続きの文章にすること。手順は「まず〜していただき、次に〜してください」のように説明すること。条件分岐は「〜の場合は〜、〜の場合は〜となります」のように読み上げる形にすること。敬語・丁寧語を使い職員に話しかける形にすること。改行は使わないこと
-・キーワード：検索で使われそうな単語・表記ゆれをカンマ区切りで列挙すること
-・信頼度：高・中・低のいずれかを記載すること
-出力例：
-"分類","Q","A","キーワード","信頼度"
-"休暇・超勤　振休","決裁済みの振替を修正したい","ただいま締め期間中のため、明日以降に操作が可能となります。まずシステムにログインしていただき、次に該当の申請を開いて修正のうえ再申請をお願いいたします。","振替,修正,決裁済み,締め期間,振休","高"
-
-
-
-
-
-
-
-Sub FormatFAQ()
-    Dim wsInput As Worksheet
-    Dim wsFAQ As Worksheet
-    Dim inputText As String
-    Dim lines() As String
+Sub RunSplit()
+    Dim wsMask As Worksheet
+    Dim wsSplit As Worksheet
+    Dim lastRow As Long
+    Dim lastRow3 As Long
     Dim i As Long
     Dim outRow As Long
-    Dim fields() As String
-    Dim line As String
-    Dim lastRowFAQ As Long
+    Dim memo As String
+    Dim roleOP As String
+    Dim roleCL As String
 
-    Set wsInput = ThisWorkbook.Sheets("Input")
-    Set wsFAQ = ThisWorkbook.Sheets("FAQ")
+    Set wsMask = ThisWorkbook.Sheets("Masked")
+    Set wsSplit = ThisWorkbook.Sheets("Split")
 
-    inputText = wsInput.Cells(1, 1).Value
-    If Trim(inputText) = "" Then
-        MsgBox "No data in Input sheet."
+    roleOP = "OP"
+    roleCL = "CL"
+
+    lastRow = wsMask.Cells(wsMask.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 3 Then
+        MsgBox "Error: No data in Masked sheet. Please run mask first."
         Exit Sub
     End If
 
-    lastRowFAQ = wsFAQ.Cells(wsFAQ.Rows.Count, 1).End(xlUp).Row
-    If lastRowFAQ > 1 Then
-        wsFAQ.Rows("2:" & lastRowFAQ).ClearContents
-    End If
-
-    If InStr(inputText, Chr(13) & Chr(10)) > 0 Then
-        lines = Split(inputText, Chr(13) & Chr(10))
-    ElseIf InStr(inputText, Chr(13)) > 0 Then
-        lines = Split(inputText, Chr(13))
-    Else
-        lines = Split(inputText, Chr(10))
+    lastRow3 = wsSplit.Cells(wsSplit.Rows.Count, 1).End(xlUp).Row
+    If lastRow3 > 2 Then
+        wsSplit.Rows("3:" & lastRow3).ClearContents
     End If
 
     Application.ScreenUpdating = False
-    outRow = 2
+    outRow = 3
 
-    For i = 0 To UBound(lines)
-        line = Trim(lines(i))
-        If line = "" Then GoTo NextLine
+    Dim ARROW As String
+    Dim HASSHIN As String
+    Dim NYUGEN As String
+    Dim RENRAKU As String
+    ARROW = ChrW(8595)
+    HASSHIN = ChrW(9632) & ChrW(30330) & ChrW(20449)
+    NYUGEN = ChrW(9679) & ChrW(20837) & ChrW(38651)
+    RENRAKU = ChrW(65308) & ChrW(36899) & ChrW(25345) & ChrW(30330) & ChrW(20449) & ChrW(65310)
 
-        ' ヘッダー行スキップ
-        If InStr(line, Chr(34) & "Q" & Chr(34)) > 0 And InStr(line, Chr(34) & "A" & Chr(34)) > 0 Then GoTo NextLine
+    For i = 3 To lastRow
+        memo = wsMask.Cells(i, 12).Value
+        If Trim(memo) = "" Then GoTo NextRow
 
-        fields = ParseCSVLine(line)
+        ' ブロックに分割する
+        ' 区切り文字：ARROW、HASSHIN、NYUGEN
+        ' 各ブロックに発言者と内容を格納する
 
-        If UBound(fields) >= 4 Then
-            wsFAQ.Cells(outRow, 1).Value = fields(0)
-            wsFAQ.Cells(outRow, 2).Value = fields(1)
-            wsFAQ.Cells(outRow, 3).Value = fields(2)
-            wsFAQ.Cells(outRow, 4).Value = fields(3)
-            wsFAQ.Cells(outRow, 5).Value = fields(4)
+        Dim blocks() As String
+        Dim roles() As String
+        ReDim blocks(0)
+        ReDim roles(0)
+        Dim blockCount As Integer
+        blockCount = 0
 
-            wsFAQ.Rows(outRow).Font.Name = "Arial"
-            wsFAQ.Rows(outRow).Font.Size = 9
-            wsFAQ.Cells(outRow, 3).WrapText = True
-            wsFAQ.Rows(outRow).RowHeight = 60
+        Dim currentText As String
+        Dim currentRole As String
+        Dim pos As Long
+        Dim nextPos As Long
+        Dim sepLen As Integer
+        Dim sepType As String
+        Dim remaining As String
 
-            ' 信頼度で色分け
-            Select Case Trim(fields(4))
-                Case Chr(39640)
-                    wsFAQ.Cells(outRow, 5).Interior.Color = RGB(198, 239, 206)
-                Case Chr(20013)
-                    wsFAQ.Cells(outRow, 5).Interior.Color = RGB(255, 235, 156)
-                Case Chr(20302)
-                    wsFAQ.Cells(outRow, 5).Interior.Color = RGB(255, 199, 206)
-            End Select
+        remaining = memo
+        currentText = ""
+        currentRole = ""
 
+        Do While Len(remaining) > 0
+            ' 次の区切り文字を探す
+            Dim posArrow As Long
+            Dim posHasshin As Long
+            Dim posNyugen As Long
+            posArrow = InStr(remaining, ARROW)
+            posHasshin = InStr(remaining, HASSHIN)
+            posNyugen = InStr(remaining, NYUGEN)
+
+            ' 最も近い区切り文字を選ぶ
+            Dim minPos As Long
+            minPos = 0
+
+            If posArrow > 0 Then
+                If minPos = 0 Or posArrow < minPos Then
+                    minPos = posArrow
+                    sepType = "ARROW"
+                    sepLen = Len(ARROW)
+                End If
+            End If
+            If posHasshin > 0 Then
+                If minPos = 0 Or posHasshin < minPos Then
+                    minPos = posHasshin
+                    sepType = "HASSHIN"
+                    sepLen = Len(HASSHIN)
+                End If
+            End If
+            If posNyugen > 0 Then
+                If minPos = 0 Or posNyugen < minPos Then
+                    minPos = posNyugen
+                    sepType = "NYUGEN"
+                    sepLen = Len(NYUGEN)
+                End If
+            End If
+
+            If minPos = 0 Then
+                ' 区切り文字なし、残り全部が1ブロック
+                currentText = currentText & remaining
+                remaining = ""
+            Else
+                ' 区切り文字の手前までがcurrentText
+                currentText = currentText & Left(remaining, minPos - 1)
+                remaining = Mid(remaining, minPos + sepLen)
+
+                ' currentTextをブロックとして保存
+                If Trim(currentText) <> "" Then
+                    ReDim Preserve blocks(blockCount)
+                    ReDim Preserve roles(blockCount)
+                    blocks(blockCount) = Trim(currentText)
+                    roles(blockCount) = currentRole
+                    blockCount = blockCount + 1
+                End If
+
+                ' 次のブロックの発言者を設定
+                Select Case sepType
+                    Case "HASSHIN"
+                        currentRole = roleOP
+                    Case "NYUGEN"
+                        currentRole = roleCL
+                    Case "ARROW"
+                        ' 直前の発言者の逆
+                        If currentRole = roleOP Then
+                            currentRole = roleCL
+                        ElseIf currentRole = roleCL Then
+                            currentRole = roleOP
+                        Else
+                            ' 最初の発言者が不明の場合はCLと推定
+                            currentRole = roleCL
+                        End If
+                End Select
+
+                currentText = ""
+            End If
+        Loop
+
+        ' 最後のブロックを保存
+        If Trim(currentText) <> "" Then
+            ReDim Preserve blocks(blockCount)
+            ReDim Preserve roles(blockCount)
+            blocks(blockCount) = Trim(currentText)
+            roles(blockCount) = currentRole
+            blockCount = blockCount + 1
+        End If
+
+        ' ブロックが1つ以下はスキップ
+        If blockCount < 2 Then GoTo NextRow
+
+        ' ペアを生成して出力
+        Dim j As Integer
+        Dim pairNum As Integer
+        pairNum = 1
+
+        For j = 0 To blockCount - 2
+            Dim text1 As String
+            Dim text2 As String
+            Dim role1 As String
+            Dim role2 As String
+            text1 = blocks(j)
+            text2 = blocks(j + 1)
+            role1 = roles(j)
+            role2 = roles(j + 1)
+
+            ' 連携発信を含むペアは除外
+            If InStr(text1, RENRAKU) > 0 Then GoTo NextPair
+            If InStr(text2, RENRAKU) > 0 Then GoTo NextPair
+
+            wsSplit.Cells(outRow, 1).Value = wsMask.Cells(i, 1).Value
+            wsSplit.Cells(outRow, 2).Value = wsMask.Cells(i, 10).Value
+            wsSplit.Cells(outRow, 3).Value = pairNum
+            wsSplit.Cells(outRow, 4).Value = role1
+            wsSplit.Cells(outRow, 5).Value = text1
+            wsSplit.Cells(outRow, 6).Value = role2
+            wsSplit.Cells(outRow, 7).Value = text2
+            wsSplit.Rows(outRow).Font.Name = "Arial"
+            wsSplit.Rows(outRow).Font.Size = 9
+            wsSplit.Cells(outRow, 5).WrapText = True
+            wsSplit.Cells(outRow, 7).WrapText = True
+            wsSplit.Rows(outRow).RowHeight = 45
+
+            outRow = outRow + 1
+            pairNum = pairNum + 1
+
+NextPair:
+        Next j
+
+        ' 最後のブロックが単独（回答なし）の場合も残す
+        Dim lastBlock As String
+        Dim lastRole As String
+        lastBlock = blocks(blockCount - 1)
+        lastRole = roles(blockCount - 1)
+
+        ' 最後のブロックが連携発信を含む場合はスキップ
+        If InStr(lastBlock, RENRAKU) > 0 Then GoTo NextRow
+
+        ' blockCountが奇数の場合、最後のブロックは単独
+        If blockCount Mod 2 = 1 Then
+            wsSplit.Cells(outRow, 1).Value = wsMask.Cells(i, 1).Value
+            wsSplit.Cells(outRow, 2).Value = wsMask.Cells(i, 10).Value
+            wsSplit.Cells(outRow, 3).Value = pairNum
+            wsSplit.Cells(outRow, 4).Value = lastRole
+            wsSplit.Cells(outRow, 5).Value = lastBlock
+            wsSplit.Cells(outRow, 6).Value = ""
+            wsSplit.Cells(outRow, 7).Value = ""
+            wsSplit.Rows(outRow).Font.Name = "Arial"
+            wsSplit.Rows(outRow).Font.Size = 9
+            wsSplit.Cells(outRow, 5).WrapText = True
+            wsSplit.Rows(outRow).RowHeight = 45
             outRow = outRow + 1
         End If
 
-NextLine:
+NextRow:
     Next i
-
-    ' ヘッダー書式
-    wsFAQ.Rows(1).Font.Name = "Arial"
-    wsFAQ.Rows(1).Font.Size = 9
-    wsFAQ.Rows(1).Font.Bold = True
-
-    ' 列幅調整
-    wsFAQ.Columns(1).ColumnWidth = 18
-    wsFAQ.Columns(2).ColumnWidth = 35
-    wsFAQ.Columns(3).ColumnWidth = 60
-    wsFAQ.Columns(4).ColumnWidth = 25
-    wsFAQ.Columns(5).ColumnWidth = 10
-
-    ' FAQシートE1にヘッダー追加
-    If Trim(wsFAQ.Cells(1, 5).Value) = "" Then
-        wsFAQ.Cells(1, 5).Value = "Shinraido"
-    End If
 
     Application.ScreenUpdating = True
 
-    MsgBox outRow - 2 & " ken no FAQ wo seikei shimashita."
+    MsgBox outRow - 3 & " ken no bunkatsu ga kanryo shimashita."
 End Sub
