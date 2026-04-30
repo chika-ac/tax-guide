@@ -1,10 +1,1636 @@
-If cntInb8 > 0 Then
-    ws.Cells(outRow, 3).Value = Format(sumInbSec8 / cntInb8, "0.0")
-Else
-    ws.Cells(outRow, 3).Value = "-"
-End If
-If cntOut8 > 0 Then
-    ws.Cells(outRow, 4).Value = Format(sumOutSec8 / cntOut8, "0.0")
-Else
-    ws.Cells(outRow, 4).Value = "-"
-End If
+Option Explicit
+
+' ============================================================
+' 電話ログ分析ツール v3 - メインマクロ
+' ============================================================
+' 【変更ガイド】
+'   NORM_DIGITS : 電話番号照合の末尾桁数（現在8桁）
+'   TIME_START  : 集計開始時刻（現在 8:30）
+'   TIME_END    : 集計終了時刻（現在 17:30）
+'   WARN_RATIO  : 注意判定の閾値（最大値の何割か、現在0.7）
+'   CRIT_RATIO  : 要注意判定の閾値（現在0.9）
+' ============================================================
+
+' ── 定数（ここを変更してカスタマイズ） ─────────────────────
+Const NORM_DIGITS   As Integer = 8
+Const TIME_START    As String  = "08:30"
+Const TIME_END      As String  = "17:30"
+Const WARN_RATIO    As Double  = 0.7
+Const CRIT_RATIO    As Double  = 0.9
+Const EXCLUDE_NUM   As String  = "4140333"   ' 除外対象の末尾7桁（変更可）
+
+' ── カラー定数 ───────────────────────────────────────────────
+Const COL_DARK    As Long = 2031139     ' 1F3864
+Const COL_MID     As Long = 11956526    ' 2E75B6 -> RGB(46,117,182)
+Const COL_LIGHT   As Long = 12448750    ' BDD7EE -> RGB(189,215,238)
+Const COL_GREEN   As Long = 14876634    ' E2EFDA -> RGB(226,239,218)
+Const COL_AMBER   As Long = 13434879    ' FFF2CC -> RGB(255,242,204)
+Const COL_RED     As Long = 13427164    ' FCE4D6 -> RGB(252,228,214)
+Const COL_LGRAY   As Long = 15921906    ' F2F2F2 -> RGB(242,242,242)
+Const COL_WHITE   As Long = 16777215
+Const COL_DARKRED As Long = 49152       ' C00000 -> RGB(192,0,0)
+
+' ============================================================
+' エントリポイント
+' ============================================================
+Sub 集計実行()
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+
+    Dim t0 As Double
+    t0 = Timer
+
+    Call Build_Event_Table
+    Call Build_Callback_Analysis
+    Call Build_5Min_Callback
+    Call Build_Aggregate
+    Call Build_Summary
+
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+
+    MsgBox "集計完了しました（" & Format(Timer - t0, "0.0") & "秒）", vbInformation, "電話ログ分析ツール"
+End Sub
+
+' ============================================================
+' 共通ユーティリティ
+' ============================================================
+
+Function CleanStr(v As Variant) As String
+    Dim s As String
+    s = Trim(CStr(v))
+    If Left(s, 1) = "'" Then s = Mid(s, 2)
+    If Right(s, 1) = "'" Then s = Left(s, Len(s) - 1)
+    CleanStr = Trim(s)
+End Function
+
+Function NormPhone(phone As String, digits As Integer) As String
+    Dim p As String
+    Dim i As Integer
+    Dim ch As String
+    p = ""
+    For i = 1 To Len(phone)
+        ch = Mid(phone, i, 1)
+        If ch >= "0" And ch <= "9" Then p = p & ch
+    Next i
+    If Len(p) >= digits Then
+        NormPhone = Right(p, digits)
+    Else
+        NormPhone = p
+    End If
+End Function
+
+Function ParseDT(s As String) As Date
+    On Error GoTo ErrH
+    s = Trim(s)
+    If s = "" Or s = Chr(34) Or s = "-" Then
+        ParseDT = 0
+        Exit Function
+    End If
+    ' yyyy/mm/dd h:mm:ss 形式を明示的に処理
+    If Len(s) >= 16 Then
+        Dim datePart As String, timePart As String
+        Dim spPos As Long
+        spPos = InStr(s, " ")
+        If spPos > 0 Then
+            datePart = Left(s, spPos - 1)
+            timePart = Mid(s, spPos + 1)
+            Dim dParts() As String, tParts() As String
+            dParts = Split(datePart, "/")
+            tParts = Split(timePart, ":")
+            If UBound(dParts) = 2 And UBound(tParts) >= 1 Then
+                Dim yr As Long, mo As Long, dy As Long
+                Dim hh As Long, mi As Long, ss As Long
+                yr = CLng(dParts(0)): mo = CLng(dParts(1)): dy = CLng(dParts(2))
+                hh = CLng(tParts(0)): mi = CLng(tParts(1))
+                ss = 0
+                If UBound(tParts) >= 2 Then ss = CLng(tParts(2))
+                ParseDT = DateSerial(yr, mo, dy) + TimeSerial(hh, mi, ss)
+                Exit Function
+            End If
+        End If
+    End If
+    ParseDT = CDate(s)
+    Exit Function
+ErrH:
+    ParseDT = 0
+End Function
+
+Function SecsToHMS(secs As Long) As String
+    Dim h As Long, m As Long, s As Long
+    h = secs \ 3600
+    m = (secs Mod 3600) \ 60
+    s = secs Mod 60
+    SecsToHMS = Format(h, "0") & ":" & Format(m, "00") & ":" & Format(s, "00")
+End Function
+
+Sub StyleDataRow(ws As Worksheet, r As Long, nCols As Long, shade As Boolean)
+    Dim rng As Range
+    Set rng = ws.Range(ws.Cells(r, 1), ws.Cells(r, nCols))
+    rng.Font.Name = "Arial"
+    rng.Font.Size = 10
+    rng.Font.Color = RGB(0, 0, 0)
+    If shade Then
+        rng.Interior.Color = COL_LGRAY
+    Else
+        rng.Interior.Color = COL_WHITE
+    End If
+    rng.HorizontalAlignment = xlCenter
+    rng.VerticalAlignment = xlCenter
+    rng.Borders(xlEdgeLeft).LineStyle = xlContinuous
+    rng.Borders(xlEdgeRight).LineStyle = xlContinuous
+    rng.Borders(xlEdgeTop).LineStyle = xlContinuous
+    rng.Borders(xlEdgeBottom).LineStyle = xlContinuous
+    rng.Borders(xlInsideVertical).LineStyle = xlContinuous
+    rng.Borders.Color = RGB(191, 191, 191)
+    rng.Borders.Weight = xlThin
+    ws.Rows(r).RowHeight = 18
+End Sub
+
+Sub StyleHeader(ws As Worksheet, r As Long, nCols As Long, dark As Boolean)
+    Dim rng As Range
+    Set rng = ws.Range(ws.Cells(r, 1), ws.Cells(r, nCols))
+    rng.Font.Name = "Arial"
+    rng.Font.Size = 10
+    rng.Font.Bold = True
+    If dark Then
+        rng.Font.Color = RGB(255, 255, 255)
+        rng.Interior.Color = COL_DARK
+    Else
+        rng.Font.Color = RGB(0, 0, 0)
+        rng.Interior.Color = COL_LIGHT
+    End If
+    rng.HorizontalAlignment = xlCenter
+    rng.VerticalAlignment = xlCenter
+    rng.Borders(xlEdgeLeft).LineStyle = xlContinuous
+    rng.Borders(xlEdgeRight).LineStyle = xlContinuous
+    rng.Borders(xlEdgeTop).LineStyle = xlContinuous
+    rng.Borders(xlEdgeBottom).LineStyle = xlContinuous
+    rng.Borders(xlInsideVertical).LineStyle = xlContinuous
+    rng.Borders.Color = RGB(191, 191, 191)
+    rng.Borders.Weight = xlThin
+    ws.Rows(r).RowHeight = 22
+End Sub
+
+' セクションタイトル行（セル結合＋スタイル）
+Sub WriteSectionTitle(ws As Worksheet, r As Long, c1 As Long, c2 As Long, _
+                      label As String, bgColor As Long, whiteFnt As Boolean)
+    On Error Resume Next
+    ws.Range(ws.Cells(r, c1), ws.Cells(r, c2)).Merge
+    On Error GoTo 0
+    Dim c As Range
+    Set c = ws.Cells(r, c1)
+    c.Value = label
+    c.Font.Name = "Arial"
+    c.Font.Size = 11
+    c.Font.Bold = True
+    If whiteFnt Then
+        c.Font.Color = RGB(255, 255, 255)
+    Else
+        c.Font.Color = RGB(0, 0, 0)
+    End If
+    c.Interior.Color = bgColor
+    c.HorizontalAlignment = xlLeft
+    c.VerticalAlignment = xlCenter
+    c.Borders(xlEdgeLeft).LineStyle = xlContinuous
+    c.Borders(xlEdgeRight).LineStyle = xlContinuous
+    c.Borders(xlEdgeTop).LineStyle = xlContinuous
+    c.Borders(xlEdgeBottom).LineStyle = xlContinuous
+    c.Borders.Color = RGB(191, 191, 191)
+    ws.Rows(r).RowHeight = 26
+End Sub
+
+' KPIブロック（ラベル行・値行・注記行の3行セット）
+Sub WriteKPI(ws As Worksheet, r As Long, c As Long, _
+             lbl As String, val As String, note As String, bgColor As Long)
+    On Error Resume Next
+    ws.Range(ws.Cells(r, c), ws.Cells(r, c + 1)).Merge
+    ws.Range(ws.Cells(r + 1, c), ws.Cells(r + 1, c + 1)).Merge
+    ws.Range(ws.Cells(r + 2, c), ws.Cells(r + 2, c + 1)).Merge
+    On Error GoTo 0
+
+    ' ラベル行
+    With ws.Cells(r, c)
+        .Value = lbl
+        .Font.Name = "Arial": .Font.Size = 10: .Font.Bold = True
+        .Font.Color = RGB(255, 255, 255)
+        .Interior.Color = bgColor
+        .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
+        .Borders(xlEdgeLeft).LineStyle = xlContinuous
+        .Borders(xlEdgeRight).LineStyle = xlContinuous
+        .Borders(xlEdgeTop).LineStyle = xlContinuous
+        .Borders(xlEdgeBottom).LineStyle = xlContinuous
+        .Borders.Color = RGB(191, 191, 191)
+    End With
+    ws.Rows(r).RowHeight = 22
+
+    ' 値行
+    With ws.Cells(r + 1, c)
+        .Value = val
+        .Font.Name = "Arial": .Font.Size = 16: .Font.Bold = True
+        .Font.Color = RGB(0, 0, 0)
+        .Interior.Color = COL_LGRAY
+        .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
+        .Borders(xlEdgeLeft).LineStyle = xlContinuous
+        .Borders(xlEdgeRight).LineStyle = xlContinuous
+        .Borders(xlEdgeTop).LineStyle = xlContinuous
+        .Borders(xlEdgeBottom).LineStyle = xlContinuous
+        .Borders.Color = RGB(191, 191, 191)
+    End With
+    ws.Rows(r + 1).RowHeight = 30
+
+    ' 注記行
+    With ws.Cells(r + 2, c)
+        .Value = note
+        .Font.Name = "Arial": .Font.Size = 9
+        .Font.Color = RGB(89, 89, 89)
+        .Interior.Color = COL_WHITE
+        .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
+        .Borders(xlEdgeLeft).LineStyle = xlContinuous
+        .Borders(xlEdgeRight).LineStyle = xlContinuous
+        .Borders(xlEdgeTop).LineStyle = xlContinuous
+        .Borders(xlEdgeBottom).LineStyle = xlContinuous
+        .Borders.Color = RGB(191, 191, 191)
+    End With
+    ws.Rows(r + 2).RowHeight = 16
+End Sub
+
+' 除外判定：B列（発信元）とC列（受電先）の両方がセンター番号の場合はTrue
+Function IsSelfCall(srcPhone As String, dstPhone As String) As Boolean
+    Dim src8 As String: src8 = NormPhone(srcPhone, 7)
+    Dim dst8 As String: dst8 = NormPhone(dstPhone, 7)
+    If src8 = EXCLUDE_NUM And dst8 = EXCLUDE_NUM Then
+        IsSelfCall = True
+    Else
+        IsSelfCall = False
+    End If
+End Function
+
+' イベントテーブルのB3・B4から期間を取得する共通関数
+Function GetDateRange(ByRef dtStart As Date, ByRef dtEnd As Date) As Boolean
+    Dim wsEV As Worksheet
+    Set wsEV = ThisWorkbook.Sheets("イベントテーブル")
+    If Not IsDate(wsEV.Cells(3, 2).Value) Or Not IsDate(wsEV.Cells(4, 2).Value) Then
+        MsgBox "イベントテーブルのB3・B4に有効な日付を入力してください", vbExclamation
+        GetDateRange = False
+        Exit Function
+    End If
+    dtStart = CDate(wsEV.Cells(3, 2).Value)
+    dtEnd   = CDate(wsEV.Cells(4, 2).Value)
+    If dtStart > dtEnd Then
+        MsgBox "開始日が終了日より後です", vbExclamation
+        GetDateRange = False
+        Exit Function
+    End If
+    GetDateRange = True
+End Function
+
+Sub ReadInputData(ByRef data() As String, ByRef nRows As Long)
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("入力データ")
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 3 Then
+        nRows = 0
+        Exit Sub
+    End If
+    nRows = lastRow - 2
+    ReDim data(1 To nRows, 1 To 8)
+    Dim r As Long, c As Long
+    For r = 1 To nRows
+        For c = 1 To 8
+            data(r, c) = CleanStr(ws.Cells(r + 2, c).Value)
+        Next c
+    Next r
+End Sub
+
+' ============================================================
+' 処理①：イベントテーブル
+' ============================================================
+Sub Build_Event_Table()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("イベントテーブル")
+
+    If Not IsDate(ws.Cells(3, 2).Value) Then
+        MsgBox "イベントテーブルのB3に開始日を入力してください", vbExclamation
+        Exit Sub
+    End If
+    If Not IsDate(ws.Cells(4, 2).Value) Then
+        MsgBox "イベントテーブルのB4に終了日を入力してください", vbExclamation
+        Exit Sub
+    End If
+
+    Dim dtStart As Date, dtEnd As Date
+    dtStart = CDate(ws.Cells(3, 2).Value)
+    dtEnd   = CDate(ws.Cells(4, 2).Value)
+
+    If dtStart > dtEnd Then
+        MsgBox "開始日が終了日より後です", vbExclamation
+        Exit Sub
+    End If
+
+    Dim data() As String, nRows As Long
+    Call ReadInputData(data, nRows)
+    If nRows = 0 Then
+        MsgBox "入力データがありません", vbExclamation
+        Exit Sub
+    End If
+
+    ' 5分スロット作成
+    Dim tS As Date, tE As Date
+    tS = TimeValue(TIME_START)
+    tE = TimeValue(TIME_END)
+    Dim nSlots As Long
+    nSlots = 0
+    Dim tt As Date
+    tt = tS
+    Do While tt <= tE
+        nSlots = nSlots + 1
+        tt = tt + TimeSerial(0, 5, 0)
+    Loop
+    ReDim slotTimes(1 To nSlots) As Date
+    tt = tS
+    Dim si As Long
+    For si = 1 To nSlots
+        slotTimes(si) = tt
+        tt = tt + TimeSerial(0, 5, 0)
+    Next si
+
+    ' 日付リスト作成
+    Dim nDays As Long
+    nDays = DateDiff("d", dtStart, dtEnd) + 1
+    ReDim dayList(1 To nDays) As Date
+    Dim di As Long
+    For di = 1 To nDays
+        dayList(di) = dtStart + di - 1
+    Next di
+
+    ' bucketMax(si, di) = 5分枠・日付ごとの最大同時通話数
+    ReDim bucketMax(1 To nSlots, 1 To nDays) As Long
+
+    ' イベント収集
+    Dim maxEv As Long
+    maxEv = nRows * 2
+    ReDim evTime(1 To maxEv) As Date
+    ReDim evChange(1 To maxEv) As Long
+    Dim nEv As Long
+    nEv = 0
+    Dim i As Long
+    For i = 1 To nRows
+        If data(i, 1) = "着信" Then
+            Dim recvDT As Date, endDT As Date
+            recvDT = ParseDT(data(i, 4))
+            endDT  = ParseDT(data(i, 7))
+            If recvDT > 0 Then
+                nEv = nEv + 1
+                evTime(nEv) = recvDT
+                evChange(nEv) = 1
+            End If
+            If endDT > 0 Then
+                nEv = nEv + 1
+                evTime(nEv) = endDT
+                evChange(nEv) = -1
+            End If
+        End If
+    Next i
+
+    ' イベントソート（バブルソート：-1を+1より先に）
+    Dim j As Long
+    Dim tmpT As Date, tmpC As Long
+    For i = 1 To nEv - 1
+        For j = 1 To nEv - i
+            Dim doSwap As Boolean
+            doSwap = False
+            If evTime(j) > evTime(j + 1) Then
+                doSwap = True
+            ElseIf evTime(j) = evTime(j + 1) And evChange(j) > evChange(j + 1) Then
+                doSwap = True
+            End If
+            If doSwap Then
+                tmpT = evTime(j): evTime(j) = evTime(j + 1): evTime(j + 1) = tmpT
+                tmpC = evChange(j): evChange(j) = evChange(j + 1): evChange(j + 1) = tmpC
+            End If
+        Next j
+    Next i
+
+    ' 累積同時通話数をスナップして bucketMax に記録
+    Dim concurrent As Long
+    concurrent = 0
+    Dim ei As Long
+    For ei = 1 To nEv
+        concurrent = concurrent + evChange(ei)
+        Dim evDate As Date
+        evDate = Int(evTime(ei))
+        Dim evTimeOnly As Date
+        evTimeOnly = evTime(ei) - Int(evTime(ei))
+        Dim evMin As Long
+        evMin = Hour(evTimeOnly) * 60 + Minute(evTimeOnly)
+        Dim slotMin As Long
+        slotMin = (evMin \ 5) * 5
+        Dim slotT As Date
+        slotT = TimeSerial(slotMin \ 60, slotMin Mod 60, 0)
+        Dim fsi As Long
+        fsi = 0
+        For si = 1 To nSlots
+            If Abs(slotTimes(si) - slotT) < 0.00001 Then
+                fsi = si
+                Exit For
+            End If
+        Next si
+        Dim fdi As Long
+        fdi = 0
+        For di = 1 To nDays
+            If dayList(di) = evDate Then
+                fdi = di
+                Exit For
+            End If
+        Next di
+        If fsi > 0 And fdi > 0 Then
+            If concurrent > bucketMax(fsi, fdi) Then
+                bucketMax(fsi, fdi) = concurrent
+            End If
+        End If
+    Next ei
+
+    ' シート出力：行5以降クリア
+    ws.Rows("5:" & ws.Rows.Count).ClearContents
+    ws.Rows("5:" & ws.Rows.Count).ClearFormats
+
+    ' 全体最大値・閾値
+    Dim maxAll As Long
+    maxAll = 0
+    For si = 1 To nSlots
+        For di = 1 To nDays
+            If bucketMax(si, di) > maxAll Then maxAll = bucketMax(si, di)
+        Next di
+    Next si
+    Dim warnTh As Long, critTh As Long
+    warnTh = CLng(maxAll * WARN_RATIO)
+    critTh = CLng(maxAll * CRIT_RATIO)
+
+    ' 行5：ヘッダー
+    Dim wdArr(0 To 6) As String
+    wdArr(0) = "日": wdArr(1) = "月": wdArr(2) = "火"
+    wdArr(3) = "水": wdArr(4) = "木": wdArr(5) = "金": wdArr(6) = "土"
+
+    ws.Cells(5, 1).Value = "時間帯（5分枠）"
+    ws.Cells(5, 2).Value = "時間帯最高値"
+    For di = 1 To nDays
+        ws.Cells(5, 2 + di).Value = Format(dayList(di), "m/d") & _
+            "（" & wdArr(Weekday(dayList(di)) - 1) & "）"
+    Next di
+    Call StyleHeader(ws, 5, 2 + nDays, False)
+    ws.Cells(5, 2).Interior.Color = COL_LIGHT
+    ws.Cells(5, 2).Font.Color = RGB(0, 0, 0)
+
+    ' データ行出力
+    Dim outRow As Long
+    outRow = 6
+    For si = 1 To nSlots
+        Dim slotStr As String
+        slotStr = Format(Hour(slotTimes(si)), "00") & ":" & Format(Minute(slotTimes(si)), "00")
+        ws.Cells(outRow, 1).Value = slotStr
+
+        ' B列：時間帯最高値（指定範囲全日付の最大）
+        Dim slotWorst As Long
+        slotWorst = 0
+        For di = 1 To nDays
+            If bucketMax(si, di) > slotWorst Then slotWorst = bucketMax(si, di)
+        Next di
+        ws.Cells(outRow, 2).Value = slotWorst
+
+        ' C列以降：各日付の値
+        For di = 1 To nDays
+            ws.Cells(outRow, 2 + di).Value = bucketMax(si, di)
+        Next di
+
+        Call StyleDataRow(ws, outRow, 2 + nDays, outRow Mod 2 = 0)
+
+        ' B列色分け
+        With ws.Cells(outRow, 2)
+            .Font.Bold = True
+            If slotWorst >= critTh And slotWorst > 0 Then
+                .Interior.Color = COL_RED
+                .Font.Color = RGB(192, 0, 0)
+            ElseIf slotWorst >= warnTh And slotWorst > 0 Then
+                .Interior.Color = COL_AMBER
+                .Font.Color = RGB(0, 0, 0)
+            ElseIf slotWorst > 0 Then
+                .Interior.Color = COL_GREEN
+                .Font.Color = RGB(0, 0, 0)
+            End If
+        End With
+
+        ' 各日カラーグラデーション
+        For di = 1 To nDays
+            Dim dv As Long
+            dv = bucketMax(si, di)
+            If maxAll > 0 And dv > 0 Then
+                Dim ratio As Double
+                ratio = dv / maxAll
+                Dim r2 As Long, g2 As Long, b2 As Long
+                r2 = CLng(200 + ratio * 55)
+                g2 = CLng(230 - ratio * 150)
+                b2 = CLng(130 - ratio * 100)
+                ws.Cells(outRow, 2 + di).Interior.Color = RGB(r2, g2, b2)
+            End If
+        Next di
+
+        outRow = outRow + 1
+    Next si
+
+    ' 最大値行
+    With ws.Range(ws.Cells(outRow, 1), ws.Cells(outRow, 2 + nDays))
+        .Interior.Color = COL_LIGHT
+        .Font.Color = RGB(0, 0, 0)
+        .Font.Bold = True
+        .Font.Name = "Arial"
+        .HorizontalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+        .Borders.Color = RGB(191, 191, 191)
+    End With
+    ws.Cells(outRow, 1).Value = "最大"
+    ws.Cells(outRow, 2).Value = maxAll
+    For di = 1 To nDays
+        ws.Cells(outRow, 2 + di).Formula = "=MAX(" & _
+            ws.Cells(6, 2 + di).Address(True, True) & ":" & _
+            ws.Cells(outRow - 1, 2 + di).Address(True, True) & ")"
+    Next di
+    ws.Rows(outRow).RowHeight = 22
+
+    ' ── 右端：時間帯（1時間単位）最高値サマリー列 ──────
+    Dim summCol As Long
+    summCol = 4 + nDays
+
+    ws.Cells(5, summCol).Value = "時間帯（1時間）"
+    ws.Cells(5, summCol + 1).Value = "最高値"
+    With ws.Range(ws.Cells(5, summCol), ws.Cells(5, summCol + 1))
+        .Interior.Color = RGB(192, 0, 0)
+        .Font.Color = RGB(255, 255, 255)
+        .Font.Bold = True
+        .Font.Name = "Arial"
+        .HorizontalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+    End With
+    ws.Columns(summCol).ColumnWidth = 18
+    ws.Columns(summCol + 1).ColumnWidth = 10
+
+    ' 時間帯ごとの最高値を計算
+    ReDim hourWorst(0 To 23) As Long
+    Dim hh As Long
+    For hh = 0 To 23: hourWorst(hh) = 0: Next hh
+    For si = 1 To nSlots
+        Dim sH As Long
+        sH = Hour(slotTimes(si))
+        Dim hw As Long
+        hw = 0
+        For di = 1 To nDays
+            If bucketMax(si, di) > hw Then hw = bucketMax(si, di)
+        Next di
+        If hw > hourWorst(sH) Then hourWorst(sH) = hw
+    Next si
+
+    ' スロット行と対応させて出力（各時間帯の先頭スロット行に表示）
+    Dim prevHour As Long
+    prevHour = -1
+    Dim summRow As Long
+    summRow = 6
+    For si = 1 To nSlots
+        Dim curH As Long
+        curH = Hour(slotTimes(si))
+        If curH <> prevHour Then
+            ws.Cells(summRow, summCol).Value = _
+                Format(curH, "00") & ":00 〜 " & Format(curH, "00") & ":59"
+            ws.Cells(summRow, summCol + 1).Value = hourWorst(curH)
+            With ws.Cells(summRow, summCol)
+                .Font.Name = "Arial": .Font.Size = 10: .Font.Bold = True
+                .Interior.Color = COL_LIGHT
+                .HorizontalAlignment = xlCenter
+                .Borders.LineStyle = xlContinuous
+                .Borders.Color = RGB(191, 191, 191)
+            End With
+            With ws.Cells(summRow, summCol + 1)
+                .Font.Name = "Arial": .Font.Size = 10: .Font.Bold = True
+                .HorizontalAlignment = xlCenter
+                .Borders.LineStyle = xlContinuous
+                .Borders.Color = RGB(191, 191, 191)
+                If hourWorst(curH) >= critTh And hourWorst(curH) > 0 Then
+                    .Interior.Color = COL_RED
+                    .Font.Color = RGB(192, 0, 0)
+                ElseIf hourWorst(curH) >= warnTh And hourWorst(curH) > 0 Then
+                    .Interior.Color = COL_AMBER
+                    .Font.Color = RGB(0, 0, 0)
+                Else
+                    .Interior.Color = COL_GREEN
+                    .Font.Color = RGB(0, 0, 0)
+                End If
+            End With
+            prevHour = curH
+        End If
+        summRow = summRow + 1
+    Next si
+
+    ' フリーズ
+    ws.Activate
+    ws.Cells(6, 1).Select
+    ActiveWindow.FreezePanes = False
+    ActiveWindow.FreezePanes = True
+
+    ws.Columns("A:A").ColumnWidth = 14
+    ws.Columns("B:B").ColumnWidth = 14
+End Sub
+
+' ============================================================
+' 処理②：受電＋折り返し分析
+' ============================================================
+Sub Build_Callback_Analysis()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("受電＋折り返し分析")
+
+    Dim dtStart As Date, dtEnd As Date
+    If Not GetDateRange(dtStart, dtEnd) Then Exit Sub
+
+    Dim data() As String, nRows As Long
+    Call ReadInputData(data, nRows)
+    If nRows = 0 Then Exit Sub
+
+    ' 発信データをインデックス化（期間内のみ）
+    ReDim outKeys(1 To nRows) As String
+    ReDim outDTs(1 To nRows) As Date
+    Dim nOut As Long
+    nOut = 0
+    Dim i As Long
+    For i = 1 To nRows
+        If data(i, 1) = "発信" Then
+            Dim callDT As Date
+            callDT = ParseDT(data(i, 4))
+            If callDT > 0 Then
+                If Int(callDT) >= dtStart And Int(callDT) <= dtEnd Then
+                    Dim dst8 As String
+                    dst8 = NormPhone(data(i, 3), 7)
+                    Dim dkey As String
+                    dkey = dst8 & "|" & Format(Int(callDT), "yyyy/mm/dd")
+                    nOut = nOut + 1
+                    outKeys(nOut) = dkey
+                    outDTs(nOut) = callDT
+                End If
+            End If
+        End If
+    Next i
+
+    ' 出力領域クリア
+    ws.Rows("3:" & ws.Rows.Count).ClearContents
+    ws.Rows("3:" & ws.Rows.Count).ClearFormats
+
+    Dim outRow As Long
+    outRow = 3
+
+    For i = 1 To nRows
+        If data(i, 1) = "着信" Then
+            Dim recvDT As Date
+            recvDT = ParseDT(data(i, 4))
+            If recvDT = 0 Then GoTo NextRow
+            ' 期間外スキップ
+            If Int(recvDT) < dtStart Or Int(recvDT) > dtEnd Then GoTo NextRow
+            ' 除外判定（B列・C列両方がセンター番号）
+            If IsSelfCall(data(i, 2), data(i, 3)) Then GoTo NextRow
+
+            Dim ivrDT  As Date: ivrDT  = ParseDT(data(i, 5))
+            Dim stDT   As Date: stDT   = ParseDT(data(i, 6))
+            Dim endDT  As Date: endDT  = ParseDT(data(i, 7))
+            Dim res    As String: res  = data(i, 8)
+            Dim src    As String: src  = data(i, 2)
+            Dim src8   As String: src8 = NormPhone(src, 7)
+            Dim recvDate As String
+            recvDate = Format(Int(recvDT), "yyyy/mm/dd")
+
+            ' 通話時間
+            Dim talkMin As String
+            talkMin = ""
+            If stDT > 0 And endDT > 0 And endDT > stDT Then
+                talkMin = Format((endDT - stDT) * 1440, "0.0")
+            End If
+
+            ' 対応時間 = G - E（秒）
+            Dim waitSec As String
+            waitSec = "-"
+            If ivrDT > 0 And endDT > 0 And endDT > ivrDT Then
+                waitSec = Format((endDT - ivrDT) * 86400, "0")
+            End If
+
+            ' 折り返し検索（同日内）
+            Dim cbFlag As String: cbFlag = "なし"
+            Dim cbDTStr As String: cbDTStr = ""
+            Dim cbMin As String: cbMin = ""
+            Dim searchKey As String
+            searchKey = src8 & "|" & recvDate
+            Dim bestDT As Date: bestDT = 0
+            Dim j As Long
+            For j = 1 To nOut
+                If outKeys(j) = searchKey Then
+                    If outDTs(j) > recvDT Then
+                        If bestDT = 0 Or outDTs(j) < bestDT Then
+                            bestDT = outDTs(j)
+                        End If
+                    End If
+                End If
+            Next j
+            If bestDT > 0 Then
+                cbFlag  = "あり"
+                cbDTStr = Format(bestDT, "yyyy/mm/dd hh:mm")
+                cbMin   = Format((bestDT - recvDT) * 1440, "0.0")
+            End If
+
+            ' 短時間通話フラグ
+            Dim shortFlag As String
+            shortFlag = ""
+            If talkMin <> "" And IsNumeric(talkMin) Then
+                If CDbl(talkMin) < 1 Then shortFlag = "○"
+            End If
+
+            Call StyleDataRow(ws, outRow, 10, outRow Mod 2 = 0)
+            ws.Cells(outRow, 1).Value = Format(recvDT, "yyyy/mm/dd hh:mm")
+            ws.Cells(outRow, 2).Value = src
+            ws.Cells(outRow, 3).Value = src8
+            ws.Cells(outRow, 4).Value = res
+            ws.Cells(outRow, 5).Value = talkMin
+            ws.Cells(outRow, 6).Value = waitSec
+            ws.Cells(outRow, 7).Value = cbFlag
+            ws.Cells(outRow, 8).Value = cbDTStr
+            ws.Cells(outRow, 9).Value = cbMin
+            ws.Cells(outRow, 10).Value = shortFlag
+
+            With ws.Cells(outRow, 7)
+                If cbFlag = "あり" Then
+                    .Interior.Color = COL_GREEN
+                    .Font.Bold = True
+                    .Font.Color = RGB(55, 86, 35)
+                Else
+                    .Interior.Color = COL_AMBER
+                    .Font.Color = RGB(0, 0, 0)
+                End If
+            End With
+
+            outRow = outRow + 1
+        End If
+NextRow:
+    Next i
+End Sub
+
+' ============================================================
+' 処理③：時間帯別（1時間単位）折り返し分析
+' ============================================================
+Sub Build_5Min_Callback()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("5分×折り返し分析")
+    ws.Rows("3:" & ws.Rows.Count).ClearContents
+    ws.Rows("3:" & ws.Rows.Count).ClearFormats
+    ' ヘッダー行を薄いブルー×黒文字で再描画
+    Call StyleHeader(ws, 2, 7, False)
+    ws.Range("A1:G1").Interior.Color = COL_LIGHT
+    ws.Range("A1:G1").Font.Color = RGB(0, 0, 0)
+    ws.Range("A1:G1").Font.Bold = True
+
+    ' 期間取得
+    Dim wsEV As Worksheet
+    Set wsEV = ThisWorkbook.Sheets("イベントテーブル")
+    If Not IsDate(wsEV.Cells(3, 2).Value) Or Not IsDate(wsEV.Cells(4, 2).Value) Then Exit Sub
+    Dim dtStart As Date: dtStart = CDate(wsEV.Cells(3, 2).Value)
+    Dim dtEnd   As Date: dtEnd   = CDate(wsEV.Cells(4, 2).Value)
+
+    Dim wsCB As Worksheet
+    Set wsCB = ThisWorkbook.Sheets("受電＋折り返し分析")
+    Dim lastCB As Long
+    lastCB = wsCB.Cells(wsCB.Rows.Count, 1).End(xlUp).Row
+    If lastCB < 3 Then Exit Sub
+
+    ' 時間帯（0〜23）ごとに集計
+    ReDim hRecv(0 To 23)    As Long
+    ReDim hCB(0 To 23)      As Long
+    ReDim hTimeCnt(0 To 23) As Long
+    ReDim hTimes(0 To 23, 1 To 5000) As Double
+
+    Dim r As Long
+    For r = 3 To lastCB
+        Dim dtStr As String
+        dtStr = CStr(wsCB.Cells(r, 1).Value)
+        If dtStr = "" Or Not IsDate(dtStr) Then GoTo NextCBRow
+        Dim dt As Date: dt = CDate(dtStr)
+        ' 期間チェック
+        If Int(dt) < dtStart Or Int(dt) > dtEnd Then GoTo NextCBRow
+
+        Dim hh As Long: hh = Hour(dt)
+        hRecv(hh) = hRecv(hh) + 1
+
+        If CStr(wsCB.Cells(r, 7).Value) = "あり" Then
+            hCB(hh) = hCB(hh) + 1
+            Dim cbMStr As String
+            cbMStr = CStr(wsCB.Cells(r, 9).Value)
+            If cbMStr <> "" And IsNumeric(cbMStr) Then
+                hTimeCnt(hh) = hTimeCnt(hh) + 1
+                hTimes(hh, hTimeCnt(hh)) = CDbl(cbMStr)
+            End If
+        End If
+NextCBRow:
+    Next r
+
+    ' 出力
+    Dim startH As Long: startH = Hour(TimeValue(TIME_START))
+    Dim endH   As Long: endH   = Hour(TimeValue(TIME_END))
+    Dim outRow As Long: outRow = 3
+
+    For hh = startH To endH
+        If hRecv(hh) = 0 Then GoTo NextHour
+        Dim total As Long: total = hRecv(hh)
+        Dim cbCnt As Long: cbCnt = hCB(hh)
+        Dim rate As Double
+        If total > 0 Then rate = cbCnt / total * 100 Else rate = 0
+
+        Dim nT As Long: nT = hTimeCnt(hh)
+        Dim avgT As String: avgT = ""
+        Dim medT As String: medT = ""
+        Dim p90T As String: p90T = ""
+
+        If nT > 0 Then
+            ReDim times(1 To nT) As Double
+            Dim k As Long
+            Dim sm As Double: sm = 0
+            For k = 1 To nT
+                times(k) = hTimes(hh, k)
+                sm = sm + times(k)
+            Next k
+            avgT = Format(sm / nT, "0.0")
+            Dim ti As Long, tj As Long, tmp As Double
+            For ti = 1 To nT - 1
+                For tj = 1 To nT - ti
+                    If times(tj) > times(tj + 1) Then
+                        tmp = times(tj): times(tj) = times(tj + 1): times(tj + 1) = tmp
+                    End If
+                Next tj
+            Next ti
+            If nT Mod 2 = 1 Then
+                medT = Format(times((nT + 1) \ 2), "0.0")
+            Else
+                medT = Format((times(nT \ 2) + times(nT \ 2 + 1)) / 2, "0.0")
+            End If
+            Dim p90idx As Long
+            p90idx = CLng(nT * 0.9)
+            If p90idx < 1 Then p90idx = 1
+            If p90idx > nT Then p90idx = nT
+            p90T = Format(times(p90idx), "0.0")
+        End If
+
+        Call StyleDataRow(ws, outRow, 7, outRow Mod 2 = 0)
+        ws.Cells(outRow, 1).Value = Format(hh, "00") & ":00 〜 " & Format(hh, "00") & ":59"
+        ws.Cells(outRow, 2).Value = total
+        ws.Cells(outRow, 3).Value = cbCnt
+        ws.Cells(outRow, 4).Value = Format(rate, "0.0") & "%"
+        ws.Cells(outRow, 5).Value = avgT
+        ws.Cells(outRow, 6).Value = medT
+        ws.Cells(outRow, 7).Value = p90T
+
+        With ws.Cells(outRow, 4)
+            If total > 0 Then
+                If rate >= 50 Then
+                    .Interior.Color = COL_RED
+                    .Font.Color = RGB(192, 0, 0)
+                ElseIf rate >= 30 Then
+                    .Interior.Color = COL_AMBER
+                    .Font.Color = RGB(0, 0, 0)
+                Else
+                    .Interior.Color = COL_GREEN
+                    .Font.Color = RGB(0, 0, 0)
+                End If
+            End If
+        End With
+
+        outRow = outRow + 1
+NextHour:
+    Next hh
+End Sub
+
+' ============================================================
+' 処理④：集計シート
+' ============================================================
+Sub Build_Aggregate()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("集計")
+    ws.Rows("3:" & ws.Rows.Count).ClearContents
+    ws.Rows("3:" & ws.Rows.Count).ClearFormats
+
+    Dim dtStart As Date, dtEnd As Date
+    If Not GetDateRange(dtStart, dtEnd) Then Exit Sub
+
+    Dim data() As String, nRows As Long
+    Call ReadInputData(data, nRows)
+    If nRows = 0 Then Exit Sub
+
+    ' 日付リスト（期間内・着信のみ）
+    ReDim dateKeys(1 To 500) As String
+    Dim nDates As Long: nDates = 0
+    Dim i As Long, j As Long
+    For i = 1 To nRows
+        If data(i, 1) = "着信" Then
+            Dim dt As Date: dt = ParseDT(data(i, 4))
+            If dt > 0 Then
+                If Int(dt) >= dtStart And Int(dt) <= dtEnd Then
+                    Dim dk As String: dk = Format(Int(dt), "yyyy/mm/dd")
+                    Dim found As Boolean: found = False
+                    For j = 1 To nDates
+                        If dateKeys(j) = dk Then found = True: Exit For
+                    Next j
+                    If Not found Then
+                        nDates = nDates + 1: dateKeys(nDates) = dk
+                    End If
+                End If
+            End If
+        End If
+    Next i
+    If nDates = 0 Then Exit Sub
+
+    ' 日付ソート
+    Dim ti As Long, tja As Long, tmpS As String
+    For ti = 1 To nDates - 1
+        For tja = 1 To nDates - ti
+            If dateKeys(tja) > dateKeys(tja + 1) Then
+                tmpS = dateKeys(tja): dateKeys(tja) = dateKeys(tja + 1): dateKeys(tja + 1) = tmpS
+            End If
+        Next tja
+    Next ti
+
+    ' 結果種別
+    Dim results(0 To 5) As String
+    results(0) = "応答": results(1) = "放棄呼": results(2) = "話中"
+    results(3) = "未応答": results(4) = "接続異常": results(5) = Chr(34)
+    Dim nRes As Long: nRes = 5
+
+    ReDim cross(1 To 500, 0 To 5) As Long
+    ReDim dailyOut(1 To 500)   As Long
+    ReDim dailyAband(1 To 500) As Long
+
+    For i = 1 To nRows
+        Dim knd As String: knd = data(i, 1)
+        Dim dt2 As Date: dt2 = ParseDT(data(i, 4))
+        If dt2 = 0 Then GoTo NextRow2
+        If Int(dt2) < dtStart Or Int(dt2) > dtEnd Then GoTo NextRow2
+        If IsSelfCall(data(i, 2), data(i, 3)) Then GoTo NextRow2
+        Dim dk2 As String: dk2 = Format(Int(dt2), "yyyy/mm/dd")
+        Dim di As Long: di = 0
+        For j = 1 To nDates
+            If dateKeys(j) = dk2 Then di = j: Exit For
+        Next j
+        If di = 0 Then GoTo NextRow2
+        If knd = "着信" Then
+            Dim res2 As String: res2 = data(i, 8)
+            Dim ri As Long
+            For ri = 0 To nRes
+                If res2 = results(ri) Then
+                    cross(di, ri) = cross(di, ri) + 1: Exit For
+                End If
+            Next ri
+            If res2 = "放棄呼" Then dailyAband(di) = dailyAband(di) + 1
+        ElseIf knd = "発信" Then
+            If NormPhone(data(i, 3), 7) <> EXCLUDE_NUM Then
+                dailyOut(di) = dailyOut(di) + 1
+            End If
+        End If
+NextRow2:
+    Next i
+
+    Dim outRow As Long: outRow = 3
+
+    ' ── ① 日別対応サマリー ──────────────────────────
+    Call WriteSectionTitle(ws, outRow, 1, 3 + nDates, _
+        "① 日別対応サマリー（①入電 ②放棄呼 呼損率 ③受電 ④発信 ⑤全体）", COL_LIGHT, False)
+    outRow = outRow + 1
+    ws.Cells(outRow, 2).Value = "項目"
+    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
+    ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+    ws.Cells(outRow, 2).HorizontalAlignment = xlCenter
+    For di = 1 To nDates: ws.Cells(outRow, 2 + di).Value = dateKeys(di): Next di
+    ws.Cells(outRow, 3 + nDates).Value = "合計"
+    Call StyleHeader(ws, outRow, 3 + nDates, False)
+    outRow = outRow + 1
+
+    Dim kpiLabels(0 To 5) As String
+    kpiLabels(0) = "①入電件数"
+    kpiLabels(1) = "②放棄呼数"
+    kpiLabels(2) = "（参考）呼損率"
+    kpiLabels(3) = "③受電件数（①－②）"
+    kpiLabels(4) = "④発信件数"
+    kpiLabels(5) = "⑤全体対応（③＋④）"
+
+    Dim ki As Long
+    For ki = 0 To 5
+        Call StyleDataRow(ws, outRow, 3 + nDates, ki Mod 2 = 0)
+        ws.Cells(outRow, 2).Value = kpiLabels(ki)
+        ws.Cells(outRow, 2).Font.Bold = True
+        ws.Cells(outRow, 2).HorizontalAlignment = xlLeft
+        Dim total2 As Long: total2 = 0
+        For di = 1 To nDates
+            Dim v As Variant
+            Dim recvCnt As Long: recvCnt = cross(di, 0)
+            Dim inbCnt2 As Long: inbCnt2 = dailyAband(di) + recvCnt
+            Select Case ki
+                Case 0: v = inbCnt2
+                Case 1: v = dailyAband(di)
+                Case 2:
+                    If inbCnt2 > 0 Then
+                        v = Format(dailyAband(di) / inbCnt2 * 100, "0.0") & "%"
+                    Else: v = "-"
+                    End If
+                Case 3: v = recvCnt
+                Case 4: v = dailyOut(di)
+                Case 5: v = recvCnt + dailyOut(di)
+            End Select
+            ws.Cells(outRow, 2 + di).Value = v
+            If IsNumeric(v) Then total2 = total2 + CLng(v)
+        Next di
+        If ki = 2 Then
+            ws.Cells(outRow, 3 + nDates).Value = "-"
+        Else
+            ws.Cells(outRow, 3 + nDates).Value = total2
+            ws.Cells(outRow, 3 + nDates).Interior.Color = COL_AMBER
+            ws.Cells(outRow, 3 + nDates).Font.Bold = True
+        End If
+        outRow = outRow + 1
+    Next ki
+    outRow = outRow + 1
+
+    ' ── ② 放棄呼テーブル（横軸=日付） ──────────────────
+    ' 日付別に放棄呼データを収集
+    ReDim abData(1 To nDates, 1 To 500, 1 To 3) As String
+    ReDim abCnt(1 To nDates) As Long
+    Dim abR As Long
+    For abR = 1 To nRows
+        If data(abR, 1) = "着信" And data(abR, 8) = "放棄呼" Then
+            Dim abDT As Date: abDT = ParseDT(data(abR, 4))
+            If abDT = 0 Then GoTo SkipAb
+            If Int(abDT) < dtStart Or Int(abDT) > dtEnd Then GoTo SkipAb
+            If IsSelfCall(data(abR, 2), data(abR, 3)) Then GoTo SkipAb
+            Dim abDk As String: abDk = Format(Int(abDT), "yyyy/mm/dd")
+            Dim abDi As Long: abDi = 0
+            Dim abJ As Long
+            For abJ = 1 To nDates
+                If dateKeys(abJ) = abDk Then abDi = abJ: Exit For
+            Next abJ
+            If abDi = 0 Then GoTo SkipAb
+            Dim abIvr As String: abIvr = data(abR, 5)
+            Dim abEnd As String: abEnd = data(abR, 7)
+            Dim abWait As String: abWait = "-"
+            If abIvr <> Chr(34) And abIvr <> "" Then
+                Dim abIvrDT As Date: abIvrDT = ParseDT(abIvr)
+                Dim abEndDT As Date: abEndDT = ParseDT(abEnd)
+                If abIvrDT > 0 And abEndDT > abIvrDT Then
+                    abWait = Format((abEndDT - abIvrDT) * 86400, "0")
+                End If
+            End If
+            abCnt(abDi) = abCnt(abDi) + 1
+            Dim abN As Long: abN = abCnt(abDi)
+            If abN <= 500 Then
+                abData(abDi, abN, 1) = Format(abDT, "hh:mm")
+                abData(abDi, abN, 2) = data(abR, 2)
+                abData(abDi, abN, 3) = abWait
+            End If
+        End If
+SkipAb:
+    Next abR
+
+    Dim abMax As Long: abMax = 0
+    Dim abDx As Long
+    For abDx = 1 To nDates
+        If abCnt(abDx) > abMax Then abMax = abCnt(abDx)
+    Next abDx
+
+    Dim nColsAb As Long: nColsAb = 1 + nDates
+    Call WriteSectionTitle(ws, outRow, 1, nColsAb, _
+        "② 放棄呼テーブル（横軸=日付）", COL_LIGHT, False)
+    outRow = outRow + 1
+
+    ws.Cells(outRow, 2).Value = "項目"
+    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
+    ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+    ws.Cells(outRow, 2).HorizontalAlignment = xlCenter
+    For abDx = 1 To nDates
+        ws.Cells(outRow, 2 + abDx).Value = dateKeys(abDx)
+    Next abDx
+    Call StyleHeader(ws, outRow, nColsAb, False)
+    outRow = outRow + 1
+
+    Call StyleDataRow(ws, outRow, nColsAb, False)
+    ws.Cells(outRow, 2).Value = "放棄呼数"
+    ws.Cells(outRow, 2).Font.Bold = True
+    For abDx = 1 To nDates
+        ws.Cells(outRow, 2 + abDx).Value = abCnt(abDx)
+        ws.Cells(outRow, 2 + abDx).Font.Bold = True
+        ws.Cells(outRow, 2 + abDx).Interior.Color = COL_AMBER
+    Next abDx
+    outRow = outRow + 1
+
+    Dim abLine As Long
+    For abLine = 1 To abMax
+        Call StyleDataRow(ws, outRow, nColsAb, outRow Mod 2 = 0)
+        ws.Cells(outRow, 2).Value = abLine & "件目 受電時刻"
+        For abDx = 1 To nDates
+            ws.Cells(outRow, 2 + abDx).Value = IIf(abLine <= abCnt(abDx), abData(abDx, abLine, 1), "-")
+        Next abDx
+        outRow = outRow + 1
+        Call StyleDataRow(ws, outRow, nColsAb, outRow Mod 2 = 0)
+        ws.Cells(outRow, 2).Value = abLine & "件目 発信元番号"
+        For abDx = 1 To nDates
+            ws.Cells(outRow, 2 + abDx).Value = IIf(abLine <= abCnt(abDx), abData(abDx, abLine, 2), "-")
+        Next abDx
+        outRow = outRow + 1
+        Call StyleDataRow(ws, outRow, nColsAb, outRow Mod 2 = 0)
+        ws.Cells(outRow, 2).Value = abLine & "件目 対応時間(秒)"
+        For abDx = 1 To nDates
+            ws.Cells(outRow, 2 + abDx).Value = IIf(abLine <= abCnt(abDx), abData(abDx, abLine, 3), "-")
+        Next abDx
+        outRow = outRow + 1
+    Next abLine
+    outRow = outRow + 1
+
+    ' ── ③ 時間別受電テーブル（応答＋放棄呼=入電件数と同定義） ──
+    Dim startH As Long: startH = Hour(TimeValue(TIME_START))
+    Dim endH   As Long: endH   = Hour(TimeValue(TIME_END))
+
+    ReDim hourDayCnt(startH To endH, 1 To 500) As Long
+    Dim i7 As Long
+    For i7 = 1 To nRows
+        If data(i7, 1) = "着信" Then
+            Dim dt7 As Date: dt7 = ParseDT(data(i7, 4))
+            If dt7 = 0 Then GoTo NextRow7
+            If Int(dt7) < dtStart Or Int(dt7) > dtEnd Then GoTo NextRow7
+            If IsSelfCall(data(i7, 2), data(i7, 3)) Then GoTo NextRow7
+            If data(i7, 8) <> "応答" And data(i7, 8) <> "放棄呼" Then GoTo NextRow7
+            Dim dk7 As String: dk7 = Format(Int(dt7), "yyyy/mm/dd")
+            Dim di7 As Long: di7 = 0
+            Dim jj As Long
+            For jj = 1 To nDates
+                If dateKeys(jj) = dk7 Then di7 = jj: Exit For
+            Next jj
+            If di7 = 0 Then GoTo NextRow7
+            Dim hh7 As Long: hh7 = Hour(dt7)
+            If hh7 >= startH And hh7 <= endH Then
+                hourDayCnt(hh7, di7) = hourDayCnt(hh7, di7) + 1
+            End If
+        End If
+NextRow7:
+    Next i7
+
+    ReDim hourTotal(startH To endH) As Long
+    ReDim dayTotal(1 To 500) As Long
+    Dim grandTotal As Long: grandTotal = 0
+    Dim hx As Long, dx As Long
+    For hx = startH To endH
+        For dx = 1 To nDates
+            hourTotal(hx) = hourTotal(hx) + hourDayCnt(hx, dx)
+            dayTotal(dx) = dayTotal(dx) + hourDayCnt(hx, dx)
+            grandTotal = grandTotal + hourDayCnt(hx, dx)
+        Next dx
+    Next hx
+
+    Dim nCols7 As Long: nCols7 = 2 + nDates + 2
+    Call WriteSectionTitle(ws, outRow, 1, nCols7, _
+        "③ 時間別受電テーブル（応答＋放棄呼・除外行除く）", COL_LIGHT, False)
+    outRow = outRow + 1
+    ws.Cells(outRow, 2).Value = "時間帯"
+    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
+    ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+    For dx = 1 To nDates
+        ws.Cells(outRow, 2 + dx).Value = dateKeys(dx)
+    Next dx
+    ws.Cells(outRow, 2 + nDates + 1).Value = "合計"
+    ws.Cells(outRow, 2 + nDates + 2).Value = "構成比"
+    Call StyleHeader(ws, outRow, nCols7, False)
+    outRow = outRow + 1
+
+    For hx = startH To endH
+        Dim shade7 As Boolean: shade7 = (outRow Mod 2 = 0)
+        Call StyleDataRow(ws, outRow, nCols7, shade7)
+        ws.Cells(outRow, 2).Value = Format(hx, "00") & ":00〜" & Format(hx, "00") & ":59"
+        ws.Cells(outRow, 2).HorizontalAlignment = xlLeft
+        For dx = 1 To nDates
+            ws.Cells(outRow, 2 + dx).Value = hourDayCnt(hx, dx)
+        Next dx
+        ws.Cells(outRow, 2 + nDates + 1).Value = hourTotal(hx)
+        ws.Cells(outRow, 2 + nDates + 1).Font.Bold = True
+        If grandTotal > 0 Then
+            ws.Cells(outRow, 2 + nDates + 2).Value = Format(hourTotal(hx) / grandTotal * 100, "0.0") & "%"
+        Else
+            ws.Cells(outRow, 2 + nDates + 2).Value = "-"
+        End If
+        outRow = outRow + 1
+    Next hx
+
+    ' 合計行
+    Call StyleDataRow(ws, outRow, nCols7, False)
+    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Interior.Color = COL_LIGHT
+    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Font.Bold = True
+    ws.Range(ws.Cells(outRow, 2), ws.Cells(outRow, nCols7)).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Value = "合計"
+    For dx = 1 To nDates
+        ws.Cells(outRow, 2 + dx).Value = dayTotal(dx)
+    Next dx
+    ws.Cells(outRow, 2 + nDates + 1).Value = grandTotal
+    ws.Cells(outRow, 2 + nDates + 2).Value = "100.0%"
+    ws.Rows(outRow).RowHeight = 20
+    outRow = outRow + 2
+
+    ' ── ④ 日別 総対応時間（横軸=日付） ─────────────────
+    Dim nCols4 As Long: nCols4 = 1 + nDates
+    Call WriteSectionTitle(ws, outRow, 1, nCols4, _
+        "④ 日別 総対応時間（G列－F列）", COL_LIGHT, False)
+    outRow = outRow + 1
+
+    ws.Cells(outRow, 2).Value = "項目"
+    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
+    ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+    ws.Cells(outRow, 2).HorizontalAlignment = xlCenter
+    For di = 1 To nDates: ws.Cells(outRow, 2 + di).Value = dateKeys(di): Next di
+    Call StyleHeader(ws, outRow, nCols4, False)
+    outRow = outRow + 1
+
+    ReDim totalInbArr(1 To nDates) As Double
+    ReDim totalOutArr(1 To nDates) As Double
+    Dim i6 As Long
+    For i6 = 1 To nRows
+        Dim dt6 As Date: dt6 = ParseDT(data(i6, 4))
+        If dt6 = 0 Then GoTo NextRow6
+        If Int(dt6) < dtStart Or Int(dt6) > dtEnd Then GoTo NextRow6
+        If IsSelfCall(data(i6, 2), data(i6, 3)) Then GoTo NextRow6
+        Dim dk6 As String: dk6 = Format(Int(dt6), "yyyy/mm/dd")
+        Dim di6 As Long: di6 = 0
+        Dim jj6 As Long
+        For jj6 = 1 To nDates
+            If dateKeys(jj6) = dk6 Then di6 = jj6: Exit For
+        Next jj6
+        If di6 = 0 Then GoTo NextRow6
+        Dim stDT6 As Date: stDT6 = ParseDT(data(i6, 6))
+        Dim endDT6 As Date: endDT6 = ParseDT(data(i6, 7))
+        If stDT6 = 0 Or endDT6 = 0 Or endDT6 <= stDT6 Then GoTo NextRow6
+        Dim sec6 As Double: sec6 = (endDT6 - stDT6) * 86400
+        If data(i6, 1) = "着信" Then
+            totalInbArr(di6) = totalInbArr(di6) + sec6
+        ElseIf data(i6, 1) = "発信" Then
+            totalOutArr(di6) = totalOutArr(di6) + sec6
+        End If
+NextRow6:
+    Next i6
+
+    Call StyleDataRow(ws, outRow, nCols4, False)
+    ws.Cells(outRow, 2).Value = "着信 総対応時間（時間）"
+    ws.Cells(outRow, 2).Font.Bold = True
+    For di = 1 To nDates
+        ws.Cells(outRow, 2 + di).Value = Format(totalInbArr(di) / 3600, "0.00")
+    Next di
+    outRow = outRow + 1
+
+    Call StyleDataRow(ws, outRow, nCols4, True)
+    ws.Cells(outRow, 2).Value = "発信 総対応時間（時間）"
+    ws.Cells(outRow, 2).Font.Bold = True
+    For di = 1 To nDates
+        ws.Cells(outRow, 2 + di).Value = Format(totalOutArr(di) / 3600, "0.00")
+    Next di
+    outRow = outRow + 1
+    outRow = outRow + 1
+
+    ' ── ⑤ 日別 対応時間平均（横軸=日付） ────────────────
+    Dim nCols5 As Long: nCols5 = 1 + nDates
+    Call WriteSectionTitle(ws, outRow, 1, nCols5, _
+        "⑤ 日別 対応時間平均（G列－F列）", COL_LIGHT, False)
+    outRow = outRow + 1
+
+    ws.Cells(outRow, 2).Value = "項目"
+    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
+    ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+    ws.Cells(outRow, 2).HorizontalAlignment = xlCenter
+    For di = 1 To nDates: ws.Cells(outRow, 2 + di).Value = dateKeys(di): Next di
+    Call StyleHeader(ws, outRow, nCols5, False)
+    outRow = outRow + 1
+
+    ReDim sumInbArr(1 To nDates) As Double
+    ReDim cntInbArr(1 To nDates) As Long
+    ReDim sumOutArr(1 To nDates) As Double
+    ReDim cntOutArr(1 To nDates) As Long
+    Dim i8 As Long
+    For i8 = 1 To nRows
+        Dim dt8 As Date: dt8 = ParseDT(data(i8, 4))
+        If dt8 = 0 Then GoTo NextRow8
+        If Int(dt8) < dtStart Or Int(dt8) > dtEnd Then GoTo NextRow8
+        If IsSelfCall(data(i8, 2), data(i8, 3)) Then GoTo NextRow8
+        Dim dk8 As String: dk8 = Format(Int(dt8), "yyyy/mm/dd")
+        Dim di8 As Long: di8 = 0
+        Dim jj8 As Long
+        For jj8 = 1 To nDates
+            If dateKeys(jj8) = dk8 Then di8 = jj8: Exit For
+        Next jj8
+        If di8 = 0 Then GoTo NextRow8
+        Dim stDT8 As Date: stDT8 = ParseDT(data(i8, 6))
+        Dim endDT8 As Date: endDT8 = ParseDT(data(i8, 7))
+        If stDT8 = 0 Or endDT8 = 0 Or endDT8 <= stDT8 Then GoTo NextRow8
+        Dim sec8 As Double: sec8 = (endDT8 - stDT8) * 86400
+        If data(i8, 1) = "着信" Then
+            sumInbArr(di8) = sumInbArr(di8) + sec8
+            cntInbArr(di8) = cntInbArr(di8) + 1
+        ElseIf data(i8, 1) = "発信" Then
+            sumOutArr(di8) = sumOutArr(di8) + sec8
+            cntOutArr(di8) = cntOutArr(di8) + 1
+        End If
+NextRow8:
+    Next i8
+
+    Call StyleDataRow(ws, outRow, nCols5, False)
+    ws.Cells(outRow, 2).Value = "着信 平均対応時間（分）"
+    ws.Cells(outRow, 2).Font.Bold = True
+    For di = 1 To nDates
+        If cntInbArr(di) > 0 Then
+            ws.Cells(outRow, 2 + di).Value = Format(sumInbArr(di) / cntInbArr(di) / 60, "0.0")
+        Else
+            ws.Cells(outRow, 2 + di).Value = "-"
+        End If
+    Next di
+    outRow = outRow + 1
+
+    Call StyleDataRow(ws, outRow, nCols5, True)
+    ws.Cells(outRow, 2).Value = "発信 平均対応時間（分）"
+    ws.Cells(outRow, 2).Font.Bold = True
+    For di = 1 To nDates
+        If cntOutArr(di) > 0 Then
+            ws.Cells(outRow, 2 + di).Value = Format(sumOutArr(di) / cntOutArr(di) / 60, "0.0")
+        Else
+            ws.Cells(outRow, 2 + di).Value = "-"
+        End If
+    Next di
+    outRow = outRow + 1
+    outRow = outRow + 1
+
+    ' ── ⑥ 時間帯別 対応時間（平均秒） ──────────────────
+    Call WriteSectionTitle(ws, outRow, 1, 2 + nDates, _
+        "⑥ 時間帯別 対応時間（秒）平均　※G列－E列。E列が " & Chr(34) & " の場合は除外", _
+        COL_LIGHT, False)
+    outRow = outRow + 1
+    ws.Cells(outRow, 2).Value = "時間帯（5分枠）"
+    ws.Cells(outRow, 2).Interior.Color = COL_LIGHT
+    ws.Cells(outRow, 2).Font.Bold = True
+    ws.Cells(outRow, 2).Font.Color = RGB(0, 0, 0)
+    ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+    For di = 1 To nDates: ws.Cells(outRow, 2 + di).Value = dateKeys(di): Next di
+    Call StyleHeader(ws, outRow, 2 + nDates, False)
+    outRow = outRow + 1
+
+    Dim tS As Date: tS = TimeValue(TIME_START)
+    Dim tE As Date: tE = TimeValue(TIME_END)
+    Dim nSlots As Long: nSlots = 0
+    Dim tt As Date: tt = tS
+    Do While tt <= tE: nSlots = nSlots + 1: tt = tt + TimeSerial(0, 5, 0): Loop
+    ReDim slotTimes2(1 To nSlots) As Date
+    tt = tS
+    Dim si As Long
+    For si = 1 To nSlots: slotTimes2(si) = tt: tt = tt + TimeSerial(0, 5, 0): Next si
+
+    If nDates > 0 And nSlots > 0 Then
+        ReDim waitSum(1 To nSlots, 1 To nDates) As Double
+        ReDim waitCnt(1 To nSlots, 1 To nDates) As Long
+        For i = 1 To nRows
+            If data(i, 1) = "着信" Then
+                Dim ivrStr As String: ivrStr = data(i, 5)
+                If ivrStr = Chr(34) Or ivrStr = "" Then GoTo NextRow3
+                Dim ivrDT As Date: ivrDT = ParseDT(ivrStr)
+                Dim endDT3 As Date: endDT3 = ParseDT(data(i, 7))
+                If ivrDT = 0 Or endDT3 = 0 Or endDT3 <= ivrDT Then GoTo NextRow3
+                Dim recvDT3 As Date: recvDT3 = ParseDT(data(i, 4))
+                If recvDT3 = 0 Then GoTo NextRow3
+                Dim recvD3 As Date: recvD3 = Int(recvDT3)
+                If recvD3 < dtStart Or recvD3 > dtEnd Then GoTo NextRow3
+                Dim wSec As Double: wSec = (endDT3 - ivrDT) * 86400
+                Dim dk3 As String: dk3 = Format(recvD3, "yyyy/mm/dd")
+                Dim di3 As Long: di3 = 0
+                For j = 1 To nDates
+                    If dateKeys(j) = dk3 Then di3 = j: Exit For
+                Next j
+                If di3 = 0 Then GoTo NextRow3
+                Dim recvTime As Date: recvTime = recvDT3 - Int(recvDT3)
+                Dim evMin2 As Long: evMin2 = Hour(recvTime) * 60 + Minute(recvTime)
+                Dim slotMin2 As Long: slotMin2 = (evMin2 \ 5) * 5
+                Dim slotT2 As Date: slotT2 = TimeSerial(slotMin2 \ 60, slotMin2 Mod 60, 0)
+                Dim fsi2 As Long: fsi2 = 0
+                For si = 1 To nSlots
+                    If Abs(slotTimes2(si) - slotT2) < 0.00001 Then fsi2 = si: Exit For
+                Next si
+                If fsi2 > 0 Then
+                    waitSum(fsi2, di3) = waitSum(fsi2, di3) + wSec
+                    waitCnt(fsi2, di3) = waitCnt(fsi2, di3) + 1
+                End If
+            End If
+NextRow3:
+        Next i
+
+        Dim si2 As Long
+        For si2 = 1 To nSlots
+            Dim anyVal As Boolean: anyVal = False
+            Dim di4 As Long
+            For di4 = 1 To nDates
+                If waitCnt(si2, di4) > 0 Then anyVal = True: Exit For
+            Next di4
+            If Not anyVal Then GoTo NextSlot
+            Dim tsStr As String
+            tsStr = Format(Hour(slotTimes2(si2)), "00") & ":" & Format(Minute(slotTimes2(si2)), "00")
+            Call StyleDataRow(ws, outRow, 2 + nDates, outRow Mod 2 = 0)
+            ws.Cells(outRow, 2).Value = tsStr
+            For di4 = 1 To nDates
+                If waitCnt(si2, di4) > 0 Then
+                    ws.Cells(outRow, 2 + di4).Value = Format(waitSum(si2, di4) / waitCnt(si2, di4), "0")
+                Else
+                    ws.Cells(outRow, 2 + di4).Value = "-"
+                End If
+            Next di4
+            outRow = outRow + 1
+NextSlot:
+        Next si2
+    End If
+
+    ws.Columns("B:B").ColumnWidth = 20
+    ws.Columns("C:C").ColumnWidth = 16
+    ws.Columns("D:D").ColumnWidth = 16
+End Sub
+
+
+' ============================================================
+' 処理⑤：傾向分析サマリー
+' ============================================================
+Sub Build_Summary()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("傾向分析サマリー")
+    ws.Rows("3:" & ws.Rows.Count).ClearContents
+    ws.Rows("3:" & ws.Rows.Count).ClearFormats
+
+    Dim wsCB As Worksheet
+    Set wsCB = ThisWorkbook.Sheets("受電＋折り返し分析")
+    Dim lastR As Long
+    lastR = wsCB.Cells(wsCB.Rows.Count, 1).End(xlUp).Row
+    If lastR < 3 Then Exit Sub
+
+    Dim totalRecv As Long: totalRecv = lastR - 2
+    Dim totalCB As Long: totalCB = 0
+    ReDim cbTimes(1 To totalRecv) As Double
+    Dim nCBT As Long: nCBT = 0
+    Dim totalShort As Long: totalShort = 0
+
+    Dim r As Long
+    For r = 3 To lastR
+        If CStr(wsCB.Cells(r, 7).Value) = "あり" Then
+            totalCB = totalCB + 1
+            Dim cm As String: cm = CStr(wsCB.Cells(r, 9).Value)
+            If cm <> "" And IsNumeric(cm) Then
+                nCBT = nCBT + 1: cbTimes(nCBT) = CDbl(cm)
+            End If
+        End If
+        If CStr(wsCB.Cells(r, 10).Value) = "○" Then totalShort = totalShort + 1
+    Next r
+
+    ' 最大同時通話数をイベントテーブルB列から取得
+    Dim wsEV As Worksheet
+    Set wsEV = ThisWorkbook.Sheets("イベントテーブル")
+    Dim maxConc As Long: maxConc = 0
+    Dim lastEVR As Long
+    lastEVR = wsEV.Cells(wsEV.Rows.Count, 2).End(xlUp).Row
+    Dim ev As Long
+    For ev = 6 To lastEVR
+        Dim evVal As Variant: evVal = wsEV.Cells(ev, 2).Value
+        If IsNumeric(evVal) And CLng(evVal) > maxConc Then maxConc = CLng(evVal)
+    Next ev
+
+    ' 平均・中央値
+    Dim avgCB As Double: avgCB = 0
+    Dim medCB As Double: medCB = 0
+    If nCBT > 0 Then
+        Dim sm As Double: sm = 0
+        Dim k As Long
+        For k = 1 To nCBT: sm = sm + cbTimes(k): Next k
+        avgCB = sm / nCBT
+        Dim ti As Long, tj As Long, tmp As Double
+        For ti = 1 To nCBT - 1
+            For tj = 1 To nCBT - ti
+                If cbTimes(tj) > cbTimes(tj + 1) Then
+                    tmp = cbTimes(tj): cbTimes(tj) = cbTimes(tj + 1): cbTimes(tj + 1) = tmp
+                End If
+            Next tj
+        Next ti
+        If nCBT Mod 2 = 1 Then
+            medCB = cbTimes((nCBT + 1) \ 2)
+        Else
+            medCB = (cbTimes(nCBT \ 2) + cbTimes(nCBT \ 2 + 1)) / 2
+        End If
+    End If
+
+    Dim cbRate As Double
+    If totalRecv > 0 Then cbRate = totalCB / totalRecv * 100 Else cbRate = 0
+
+    ' KPI出力
+    Dim outRow As Long: outRow = 3
+    Call WriteKPI(ws, outRow, 2, "総受電数", CStr(totalRecv), "全期間合計", COL_MID)
+    Call WriteKPI(ws, outRow, 4, "最大同時通話数", CStr(maxConc), "必要回線数ピーク", COL_DARKRED)
+    outRow = outRow + 4
+    Call WriteKPI(ws, outRow, 2, "折り返し件数", CStr(totalCB), _
+        "折り返し率 " & Format(cbRate, "0.0") & "%", COL_MID)
+    Call WriteKPI(ws, outRow, 4, "平均折り返し時間", _
+        Format(avgCB, "0.0") & "分", "中央値 " & Format(medCB, "0.0") & "分", RGB(55, 86, 35))
+    outRow = outRow + 4
+
+    ' ボトルネック診断
+    Call WriteSectionTitle(ws, outRow, 2, 5, "🔍 ボトルネック診断", COL_MID, False)
+    outRow = outRow + 1
+
+    Dim diagItems(0 To 3) As String
+    Dim diagVals(0 To 3) As String
+    diagItems(0) = "最大同時通話数（回線ピーク）"
+    diagVals(0) = CStr(maxConc) & " 回線"
+    diagItems(1) = "折り返し率"
+    diagVals(1) = Format(cbRate, "0.0") & "% （" & totalCB & "/" & totalRecv & "件）"
+    diagItems(2) = "平均折り返し遅延"
+    diagVals(2) = Format(avgCB, "0.0") & "分（中央値 " & Format(medCB, "0.0") & "分）"
+    diagItems(3) = "短時間通話（<1分）件数"
+    diagVals(3) = CStr(totalShort) & " 件"
+
+    Dim ki As Long
+    For ki = 0 To 3
+        ws.Cells(outRow, 2).Value = diagItems(ki)
+        ws.Cells(outRow, 2).Font.Name = "Arial": ws.Cells(outRow, 2).Font.Bold = True
+        ws.Cells(outRow, 2).Interior.Color = COL_LGRAY
+        ws.Cells(outRow, 2).HorizontalAlignment = xlLeft
+        ws.Cells(outRow, 2).Borders.LineStyle = xlContinuous
+        ws.Cells(outRow, 2).Borders.Color = RGB(191, 191, 191)
+        On Error Resume Next
+        ws.Range(ws.Cells(outRow, 3), ws.Cells(outRow, 5)).Merge
+        On Error GoTo 0
+        ws.Cells(outRow, 3).Value = diagVals(ki)
+        ws.Cells(outRow, 3).Font.Name = "Arial"
+        ws.Cells(outRow, 3).Interior.Color = COL_WHITE
+        ws.Cells(outRow, 3).HorizontalAlignment = xlLeft
+        ws.Cells(outRow, 3).Borders.LineStyle = xlContinuous
+        ws.Cells(outRow, 3).Borders.Color = RGB(191, 191, 191)
+        ws.Rows(outRow).RowHeight = 20
+        outRow = outRow + 1
+    Next ki
+
+    ws.Columns("B:B").ColumnWidth = 30
+    ws.Columns("C:D").ColumnWidth = 18
+End Sub
+
+' ============================================================
+' デバッグ確認用（問題解決後に削除可）
+' ============================================================
+Sub デバッグ確認()
+    Dim data() As String, nRows As Long
+    Call ReadInputData(data, nRows)
+
+    Dim msg As String
+    msg = "総行数: " & nRows & vbCrLf
+
+    If nRows = 0 Then
+        MsgBox "データが読み込めていません。入力データシートを確認してください。", vbExclamation
+        Exit Sub
+    End If
+
+    ' 最初の3行の内容を表示
+    Dim i As Long
+    For i = 1 To 3
+        If i > nRows Then Exit For
+        msg = msg & "---行" & i & "---" & vbCrLf
+        msg = msg & "A(種別)=[" & data(i, 1) & "]" & vbCrLf
+        msg = msg & "D(受電日時)=[" & data(i, 4) & "]" & vbCrLf
+        msg = msg & "H(結果)=[" & data(i, 8) & "]" & vbCrLf
+    Next i
+
+    ' 受電・発信の件数カウント
+    Dim nRecv As Long, nSend As Long, nOther As Long
+    For i = 1 To nRows
+        Select Case data(i, 1)
+            Case "着信": nRecv = nRecv + 1
+            Case "発信": nSend = nSend + 1
+            Case Else:   nOther = nOther + 1
+        End Select
+    Next i
+    msg = msg & "---集計---" & vbCrLf
+    msg = msg & "受電件数: " & nRecv & vbCrLf
+    msg = msg & "発信件数: " & nSend & vbCrLf
+    msg = msg & "未分類: " & nOther & vbCrLf
+
+    ' 日時パースの確認
+    Dim dt As Date
+    dt = ParseDT(data(1, 4))
+    msg = msg & "1行目の日時パース結果: [" & CStr(dt) & "]" & vbCrLf
+
+    MsgBox msg, vbInformation, "デバッグ確認"
+End Sub
