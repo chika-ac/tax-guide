@@ -1,1 +1,9 @@
-Debug.Print InStr(ThisWorkbook.Sheets("Data").Cells(10, 12).Value, ChrW(8595))
+' ↓がない行は無視
+        If InStr(memo, ChrW(8595)) = 0 Then GoTo NextRow
+
+        ' 改行+↓+改行 で分割、なければ↓のみで分割
+        If InStr(memo, Chr(10) & ChrW(8595) & Chr(10)) > 0 Then
+            parts = Split(memo, Chr(10) & ChrW(8595) & Chr(10))
+        Else
+            parts = Split(memo, ChrW(8595))
+        End If
