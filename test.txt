@@ -1,5 +1,3 @@
-Debug.Print InStr(ThisWorkbook.Sheets("Masked").Cells(3, 12).Value, Chr(8595))
+Debug.Print InStr(ThisWorkbook.Sheets("Data").Cells(3, 12).Value, Chr(8595))
 
-Debug.Print InStr(ThisWorkbook.Sheets("Masked").Cells(4, 12).Value, Chr(8595))
-
-Debug.Print InStr(ThisWorkbook.Sheets("Masked").Cells(5, 12).Value, Chr(8595))
+Debug.Print Len(ThisWorkbook.Sheets("Data").Cells(3, 12).Value)
