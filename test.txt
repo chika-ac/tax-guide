@@ -1,43 +1,26 @@
-Sub RunMask()
-    Dim wsSrc As Worksheet
-    Dim wsMask As Worksheet
-    Dim lastRow As Long
-    Dim i As Long
-    Dim j As Integer
-    Dim cellVal As String
-    Dim maskChar As String
+Function MaskText(text As String, maskChar As String) As String
+    Dim re As Object
+    Dim result As String
+    result = text
 
-    Set wsSrc = ThisWorkbook.Sheets("元データ")
-    Set wsMask = ThisWorkbook.Sheets("マスク済データ")
-    maskChar = "●●"
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.IgnoreCase = False
 
-    lastRow = wsSrc.Cells(wsSrc.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 3 Then
-        MsgBox "元データが見つかりません。"
-        Exit Sub
-    End If
+    re.Pattern = "\b\d{12}\b"
+    result = re.Replace(result, maskChar)
 
-    Dim lastRow2 As Long
-    lastRow2 = wsMask.Cells(wsMask.Rows.Count, 1).End(xlUp).Row
-    If lastRow2 > 2 Then
-        wsMask.Rows("3:" & lastRow2).ClearContents
-    End If
+    re.Pattern = "\b\d{7,8}\b"
+    result = re.Replace(result, maskChar)
 
-    Application.ScreenUpdating = False
+    re.Pattern = "[^\s\n]{1,10}(様|さま|サマ|さん)"
+    result = re.Replace(result, maskChar)
 
-    For i = 3 To lastRow
-        For j = 1 To 23
-            cellVal = CStr(wsSrc.Cells(i, j).Value)
-            cellVal = MaskText(cellVal, maskChar)
-            wsMask.Cells(i, j).Value = cellVal
-            wsMask.Cells(i, j).Font.Name = "Arial"
-            wsMask.Cells(i, j).Font.Size = 9
-        Next j
-    Next i
+    re.Pattern = "(¥|\\)[\d,]+"
+    result = re.Replace(result, maskChar)
 
-    Application.ScreenUpdating = True
+    re.Pattern = "\d[\d,]*(円|えん)"
+    result = re.Replace(result, maskChar)
 
-    Dim msg2 As String
-    msg2 = lastRow - 2 & " 件のマスク処理が完了しました。"
-    MsgBox msg2
-End Sub
+    MaskText = result
+End Function
