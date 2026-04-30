@@ -1,5 +1,157 @@
-Debug.Print Len(ThisWorkbook.Sheets("Input").Cells(1, 1).Value)
+以下のCSVは、ヘルプデスクへの問合せ履歴を会話ペア単位に分割したものです。個人情報はすでに**でマスク済みです。
+思考過程は出力せず、最終的なCSVのみを出力してください。
+CSVのカラムは以下の通りです：
+・ID：問合せ番号
+・Category：業務分類詳細
+・PairNo：会話ペア番号
+・Role1：CL（クライアント）またはOP（オペレーター）
+・Text1：Role1の発言内容
+・Role2：CL（クライアント）またはOP（オペレーター）
+・Text2：Role2の発言内容
+・CLの発言が質問、OPの発言が回答となります
+・Role2が空欄の行は回答なしの記録です
+あなたはFAQ作成と品質管理を行う担当です。全行を処理し、1つのCSVにまとめて出力してください。各行についてSTEP1〜4を実施し、最終的にCSV形式で出力してください。
+STEP1：FAQ生成
+会話ログからFAQを作成してください。
+ルール：
+・顧客の主な質問を1つに要約する
+・回答は簡潔かつ実務で使える内容にする
+・不明な情報は推測せず「不明」と記載する
+・不要な挨拶や雑談は除外する
+・推測や曖昧表現（たぶん・おそらく・〜と思われます）は使用禁止
+・**はマスク済み個人情報のため含めないこと
+STEP2：自己レビュー
+作成したFAQについて以下をチェックしてください：
+①質問が1つに特定できるか
+②回答が質問に直接答えているか
+③行動に必要な情報が含まれているか（手順・条件・担当者・期限のいずれか）
+④推測や曖昧表現が含まれていないか
+⑤たぶん・おそらく・〜と思われます　が含まれていないか
+不足や問題があれば指摘すること
+STEP3：改善
+STEP2の指摘をもとにFAQを改善してください。
+※不明な情報は無理に補完しない
+STEP4：信頼度判定
+以下の基準で判定：
+・高：すべて満たしており、そのまま利用可能
+・中：一部不足があるが軽微な修正で利用可能（要確認）
+・低：質問や回答が成立していない、または情報不足（使用不可）
+最終出力ルール：
+・出力はCSV形式のみ。説明文・前置き・補足は一切不要
+・最初の行は必ず以下のヘッダー行にすること
+"分類","Q","A","キーワード","信頼度"
+・2行目以降はデータ行とすること
+・各フィールドは必ずダブルクォートで囲むこと
+・全行を処理し1つのCSVにまとめて出力すること
+・複数行で同じ内容の問合せはまとめて1つのFAQにすること
+・Role2が空欄の行はQのみ作成しAは「回答未記録」、信頼度は「低」とすること
+各フィールドのルール：
+・分類：CSVのCategory列の値をそのまま使用すること
+・Q：職員目線の口語で「〜したい」または「〜について教えてください」の形式にすること
+・A：STEP3の改善後FAQの回答を使用すること。オペレーターが電話口でそのまま読み上げられる口語文にすること。箇条書き・番号・記号は使わず一続きの文章にすること。手順は「まず〜していただき、次に〜してください」のように説明すること。条件分岐は「〜の場合は〜、〜の場合は〜となります」のように読み上げる形にすること。敬語・丁寧語を使い職員に話しかける形にすること。改行は使わないこと
+・キーワード：検索で使われそうな単語・表記ゆれをカンマ区切りで列挙すること
+・信頼度：高・中・低のいずれかを記載すること
+出力例：
+"分類","Q","A","キーワード","信頼度"
+"休暇・超勤　振休","決裁済みの振替を修正したい","ただいま締め期間中のため、明日以降に操作が可能となります。まずシステムにログインしていただき、次に該当の申請を開いて修正のうえ再申請をお願いいたします。","振替,修正,決裁済み,締め期間,振休","高"
 
-Debug.Print InStr(ThisWorkbook.Sheets("Input").Cells(1, 1).Value, Chr(10))
 
-Debug.Print InStr(ThisWorkbook.Sheets("Input").Cells(1, 1).Value, Chr(13))
+
+
+
+
+
+Sub FormatFAQ()
+    Dim wsInput As Worksheet
+    Dim wsFAQ As Worksheet
+    Dim inputText As String
+    Dim lines() As String
+    Dim i As Long
+    Dim outRow As Long
+    Dim fields() As String
+    Dim line As String
+    Dim lastRowFAQ As Long
+
+    Set wsInput = ThisWorkbook.Sheets("Input")
+    Set wsFAQ = ThisWorkbook.Sheets("FAQ")
+
+    inputText = wsInput.Cells(1, 1).Value
+    If Trim(inputText) = "" Then
+        MsgBox "No data in Input sheet."
+        Exit Sub
+    End If
+
+    lastRowFAQ = wsFAQ.Cells(wsFAQ.Rows.Count, 1).End(xlUp).Row
+    If lastRowFAQ > 1 Then
+        wsFAQ.Rows("2:" & lastRowFAQ).ClearContents
+    End If
+
+    If InStr(inputText, Chr(13) & Chr(10)) > 0 Then
+        lines = Split(inputText, Chr(13) & Chr(10))
+    ElseIf InStr(inputText, Chr(13)) > 0 Then
+        lines = Split(inputText, Chr(13))
+    Else
+        lines = Split(inputText, Chr(10))
+    End If
+
+    Application.ScreenUpdating = False
+    outRow = 2
+
+    For i = 0 To UBound(lines)
+        line = Trim(lines(i))
+        If line = "" Then GoTo NextLine
+
+        ' ヘッダー行スキップ
+        If InStr(line, Chr(34) & "Q" & Chr(34)) > 0 And InStr(line, Chr(34) & "A" & Chr(34)) > 0 Then GoTo NextLine
+
+        fields = ParseCSVLine(line)
+
+        If UBound(fields) >= 4 Then
+            wsFAQ.Cells(outRow, 1).Value = fields(0)
+            wsFAQ.Cells(outRow, 2).Value = fields(1)
+            wsFAQ.Cells(outRow, 3).Value = fields(2)
+            wsFAQ.Cells(outRow, 4).Value = fields(3)
+            wsFAQ.Cells(outRow, 5).Value = fields(4)
+
+            wsFAQ.Rows(outRow).Font.Name = "Arial"
+            wsFAQ.Rows(outRow).Font.Size = 9
+            wsFAQ.Cells(outRow, 3).WrapText = True
+            wsFAQ.Rows(outRow).RowHeight = 60
+
+            ' 信頼度で色分け
+            Select Case Trim(fields(4))
+                Case Chr(39640)
+                    wsFAQ.Cells(outRow, 5).Interior.Color = RGB(198, 239, 206)
+                Case Chr(20013)
+                    wsFAQ.Cells(outRow, 5).Interior.Color = RGB(255, 235, 156)
+                Case Chr(20302)
+                    wsFAQ.Cells(outRow, 5).Interior.Color = RGB(255, 199, 206)
+            End Select
+
+            outRow = outRow + 1
+        End If
+
+NextLine:
+    Next i
+
+    ' ヘッダー書式
+    wsFAQ.Rows(1).Font.Name = "Arial"
+    wsFAQ.Rows(1).Font.Size = 9
+    wsFAQ.Rows(1).Font.Bold = True
+
+    ' 列幅調整
+    wsFAQ.Columns(1).ColumnWidth = 18
+    wsFAQ.Columns(2).ColumnWidth = 35
+    wsFAQ.Columns(3).ColumnWidth = 60
+    wsFAQ.Columns(4).ColumnWidth = 25
+    wsFAQ.Columns(5).ColumnWidth = 10
+
+    ' FAQシートE1にヘッダー追加
+    If Trim(wsFAQ.Cells(1, 5).Value) = "" Then
+        wsFAQ.Cells(1, 5).Value = "Shinraido"
+    End If
+
+    Application.ScreenUpdating = True
+
+    MsgBox outRow - 2 & " ken no FAQ wo seikei shimashita."
+End Sub
