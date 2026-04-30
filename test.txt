@@ -1,3 +1,8 @@
 Dim ws As Worksheet
 Set ws = ThisWorkbook.Sheets("Masked")
 Debug.Print ws.Cells(3, 12).Value
+
+
+
+
+Debug.Print MaskText("田中さんから920299番に連絡", "**")
