@@ -1,1 +1,1 @@
-Debug.Print Asc(Mid(ThisWorkbook.Sheets("Data").Cells(3, 12).Value, 1, 1))
+Debug.Print AscW(Mid(ThisWorkbook.Sheets("Data").Cells(3, 12).Value, 1, 1))
