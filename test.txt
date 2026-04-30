@@ -1,8 +1,7 @@
-Attribute VB_Name = "SimModule"
-Option Explicit
 
 ' =====================================================================
-' コールセンター シミュレーション v2
+' コールセンター シミュレーション v3
+' 着信総数 = 受電数 + 新規折り返し待ち を保証
 ' =====================================================================
 
 Sub RunSimulation()
@@ -12,19 +11,16 @@ Sub RunSimulation()
     Dim wsDetail As Worksheet: Set wsDetail = ThisWorkbook.Sheets("シミュレーション明細")
 
     ' ---- パラメータ読み込み ----
-    Dim numOp      As Long:   numOp      = CLng(wsParam.Range("C5").Value)   ' オペレーター人数
-    Dim postProc   As Long:   postProc   = CLng(wsParam.Range("C6").Value)   ' 後続処理（分）
-    Dim cbTalk     As Long:   cbTalk     = CLng(wsParam.Range("C7").Value)   ' 折り返し通話（分）
-    Dim rkPrep     As Long:   rkPrep     = CLng(wsParam.Range("C8").Value)   ' 連携準備（分）
-    Dim rkTalk     As Long:   rkTalk     = CLng(wsParam.Range("C9").Value)   ' 連携通話（分）
-    Dim rkTotal    As Long:   rkTotal    = rkPrep + rkTalk                   ' 連携1件コスト
-    Dim startHHMM  As String: startHHMM  = CStr(wsParam.Range("C10").Value)
-    Dim endHHMM    As String: endHHMM    = CStr(wsParam.Range("C11").Value)
-    Dim dtStart    As Date:   dtStart    = CDate(wsParam.Range("C12").Value)
-    Dim dtEnd      As Date:   dtEnd      = CDate(wsParam.Range("C13").Value)
-
-    Dim dayStart As Long: dayStart = HMtoMin(startHHMM)
-    Dim dayEnd   As Long: dayEnd   = HMtoMin(endHHMM)
+    Dim numOp    As Long: numOp    = CLng(wsParam.Range("C5").Value)
+    Dim postProc As Long: postProc = CLng(wsParam.Range("C6").Value)
+    Dim cbTalk   As Long: cbTalk   = CLng(wsParam.Range("C7").Value)
+    Dim rkPrep   As Long: rkPrep   = CLng(wsParam.Range("C8").Value)
+    Dim rkTalk   As Long: rkTalk   = CLng(wsParam.Range("C9").Value)
+    Dim rkTotal  As Long: rkTotal  = rkPrep + rkTalk
+    Dim dayStart As Long: dayStart = HMtoMin(CStr(wsParam.Range("C10").Value))
+    Dim dayEnd   As Long: dayEnd   = HMtoMin(CStr(wsParam.Range("C11").Value))
+    Dim dtStart  As Date: dtStart  = CDate(wsParam.Range("C12").Value)
+    Dim dtEnd    As Date: dtEnd    = CDate(wsParam.Range("C13").Value)
 
     ' ---- 日別連携発信件数 ----
     Dim rkDates(1 To 100) As Date
@@ -35,8 +31,9 @@ Sub RunSimulation()
         Dim dv As Variant: dv = wsParam.Cells(r, 2).Value
         Dim cv As Variant: cv = wsParam.Cells(r, 3).Value
         If dv <> "" And cv <> "" Then
+            Dim td As Date
             On Error Resume Next
-            Dim td As Date: td = CDate(dv)
+            td = CDate(dv)
             On Error GoTo 0
             If td > 0 Then
                 rkN = rkN + 1
@@ -46,7 +43,7 @@ Sub RunSimulation()
         End If
     Next r
 
-    ' ---- 入力データ（着信のみ）読み込み ----
+    ' ---- 入力データ読み込み ----
     Dim lastRow As Long
     lastRow = wsInput.Cells(wsInput.Rows.Count, 2).End(xlUp).Row
     If lastRow < 3 Then
@@ -56,21 +53,18 @@ Sub RunSimulation()
     Const INT_NUM As String = "4140333"
 
     ReDim evDate(1 To 10000) As Date
-    ReDim evMin(1 To 10000)  As Long   ' 着信時刻（分）
-    ReDim evDur(1 To 10000)  As Long   ' 通話時間（分）
+    ReDim evMin(1 To 10000)  As Long
+    ReDim evDur(1 To 10000)  As Long
     Dim evN As Long: evN = 0
 
     For r = 3 To lastRow
-        ' 種別チェック
         Dim sType As String: sType = CQ(CStr(wsInput.Cells(r, 2).Value))
         If sType <> "着信" Then GoTo Skip
 
-        ' 内部通話除外
         Dim sF As String: sF = L7(CQ(CStr(wsInput.Cells(r, 3).Value)))
         Dim sT As String: sT = L7(CQ(CStr(wsInput.Cells(r, 4).Value)))
         If sF = INT_NUM And sT = INT_NUM Then GoTo Skip
 
-        ' 受電日時パース
         Dim sD As String: sD = CQ(CStr(wsInput.Cells(r, 5).Value))
         If sD = "" Then GoTo Skip
         Dim dtR As Date
@@ -78,11 +72,8 @@ Sub RunSimulation()
         dtR = CDate(sD)
         On Error GoTo 0
         If dtR = 0 Then GoTo Skip
-
-        ' 期間フィルタ
         If DateValue(dtR) < dtStart Or DateValue(dtR) > dtEnd Then GoTo Skip
 
-        ' 通話時間（G列終了 - F列開始）
         Dim sB As String: sB = CQ(CStr(wsInput.Cells(r, 7).Value))
         Dim sE As String: sE = CQ(CStr(wsInput.Cells(r, 8).Value))
         Dim dur As Long: dur = 0
@@ -100,7 +91,24 @@ Sub RunSimulation()
 Skip:
     Next r
 
-    ' ---- 結果・明細シートクリア ----
+    ' ---- 着信データを日付・時刻順にソート（バブルソート）----
+    Dim si As Long, sj As Long
+    Dim tmpD As Date, tmpM As Long, tmpDur As Long
+    For si = 1 To evN - 1
+        For sj = 1 To evN - si
+            Dim a As Long: a = sj
+            Dim b As Long: b = sj + 1
+            Dim aKey As Double: aKey = CDbl(evDate(a)) * 1440 + evMin(a)
+            Dim bKey As Double: bKey = CDbl(evDate(b)) * 1440 + evMin(b)
+            If aKey > bKey Then
+                tmpD = evDate(a): evDate(a) = evDate(b): evDate(b) = tmpD
+                tmpM = evMin(a):  evMin(a)  = evMin(b):  evMin(b)  = tmpM
+                tmpDur = evDur(a): evDur(a) = evDur(b): evDur(b) = tmpDur
+            End If
+        Next sj
+    Next si
+
+    ' ---- シートクリア ----
     wsResult.Rows("4:" & wsResult.Rows.Count).ClearContents
     wsResult.Rows("4:" & wsResult.Rows.Count).Interior.ColorIndex = xlNone
     wsDetail.Rows("4:" & wsDetail.Rows.Count).ClearContents
@@ -108,16 +116,14 @@ Skip:
 
     Dim resRow As Long: resRow = 4
     Dim detRow As Long: detRow = 4
-
-    ' 繰越キュー
-    Dim cbQueue As Long: cbQueue = 0   ' 折り返し発信 繰越
-    Dim rkQueue As Long: rkQueue = 0   ' 連携発信 繰越
+    Dim cbQueue As Long: cbQueue = 0
+    Dim rkQueue As Long: rkQueue = 0
 
     ' ---- 日ごとシミュレーション ----
     Dim dt As Date
     For dt = dtStart To dtEnd
 
-        ' この日の着信を収集（入力データは時系列順を前提）
+        ' この日の着信を収集（ソート済みなので順序保証）
         Dim dEvN As Long: dEvN = 0
         ReDim dMin(1 To 5000) As Long
         ReDim dDur(1 To 5000) As Long
@@ -136,18 +142,16 @@ Skip:
             If rkDates(i) = dt Then rkDay = rkCnts(i): Exit For
         Next i
 
-        ' オペレーター解放時刻（分）
+        ' オペレーター解放時刻
         ReDim opFree(1 To numOp) As Long
         For i = 1 To numOp: opFree(i) = dayStart: Next i
 
-        ' 日次カウンタ
-        Dim inTotal  As Long: inTotal  = dEvN
-        Dim inAns    As Long: inAns    = 0
-        Dim newCB    As Long: newCB    = 0
-        Dim cbDone   As Long: cbDone   = 0
-        Dim rkDone   As Long: rkDone   = 0
+        Dim inTotal As Long: inTotal = dEvN
+        Dim inAns   As Long: inAns   = 0
+        Dim newCB   As Long: newCB   = 0
+        Dim cbDone  As Long: cbDone  = 0
+        Dim rkDone  As Long: rkDone  = 0
 
-        ' キュー（当日分 + 繰越）
         Dim pendCB As Long: pendCB = cbQueue: cbQueue = 0
         Dim pendRK As Long: pendRK = rkQueue + rkDay: rkQueue = 0
 
@@ -157,7 +161,7 @@ Skip:
         ' ---- イベントループ ----
         Do
             guard = guard + 1
-            If guard > 30000 Then Exit Do
+            If guard > 50000 Then Exit Do
 
             ' 次の着信時刻
             Dim nextIn As Long
@@ -170,42 +174,58 @@ Skip:
                 If opFree(i) < bMin Then bMin = opFree(i): bOp = i
             Next i
 
-            ' ---- 次の着信よりオペレーターが先に空く → 隙間時間処理 ----
+            ' ========================================
+            ' 着信が来る前にオペレーターが空いている
+            ' → 隙間時間：折り返し or 連携発信
+            ' ========================================
             If bMin < nextIn And bMin < dayEnd Then
-                ' 隙間時間 = bMin ～ nextIn（または dayEnd）の間
-                Dim gapEnd As Long: gapEnd = nextIn
-                If gapEnd > dayEnd Then gapEnd = dayEnd
 
                 If pendCB > 0 Then
-                    ' 折り返し発信（準備時間なし）
+                    ' 折り返し発信が隙間に収まるか確認
                     Dim cbEnd As Long: cbEnd = bMin + cbTalk
-                    If cbEnd <= dayEnd Then
-                        pendCB = pendCB - 1: cbDone = cbDone + 1
-                        opFree(bOp) = cbEnd
-                        WD wsDetail, detRow, dt, "折り返し発信", MTS(bMin), MTS(cbEnd), "", cbTalk, "", "折り返しキューから処理"
-                        detRow = detRow + 1
+                    ' 収まらなくても次の着信前までに終わるなら実施
+                    If cbEnd <= nextIn Or nextIn > dayEnd Then
+                        If cbEnd <= dayEnd Then
+                            pendCB = pendCB - 1: cbDone = cbDone + 1
+                            opFree(bOp) = cbEnd
+                            WD wsDetail, detRow, dt, "折り返し発信", MTS(bMin), MTS(cbEnd), "", cbTalk, "", "折り返しキューから処理"
+                            detRow = detRow + 1
+                        Else
+                            cbQueue = cbQueue + pendCB: pendCB = 0
+                        End If
                     Else
-                        cbQueue = cbQueue + pendCB: pendCB = 0
+                        ' 次の着信までに終わらない → 着信処理を優先
+                        GoTo HandleInbound
                     End If
 
                 ElseIf pendRK > 0 Then
-                    ' 連携発信（準備時間 + 通話時間）
                     Dim rkEnd As Long: rkEnd = bMin + rkTotal
-                    If rkEnd <= dayEnd Then
-                        pendRK = pendRK - 1: rkDone = rkDone + 1
-                        opFree(bOp) = rkEnd
-                        WD wsDetail, detRow, dt, "連携発信", MTS(bMin), MTS(bMin + rkPrep), "", rkTalk, MTS(rkEnd), "準備" & rkPrep & "分+通話" & rkTalk & "分"
-                        detRow = detRow + 1
+                    If rkEnd <= nextIn Or nextIn > dayEnd Then
+                        If rkEnd <= dayEnd Then
+                            pendRK = pendRK - 1: rkDone = rkDone + 1
+                            opFree(bOp) = rkEnd
+                            WD wsDetail, detRow, dt, "連携発信", MTS(bMin), MTS(bMin + rkPrep), "", rkTalk, MTS(rkEnd), "準備" & rkPrep & "分+通話" & rkTalk & "分"
+                            detRow = detRow + 1
+                        Else
+                            rkQueue = rkQueue + pendRK: pendRK = 0
+                        End If
                     Else
-                        rkQueue = rkQueue + pendRK: pendRK = 0
+                        GoTo HandleInbound
                     End If
 
                 Else
-                    Exit Do   ' やることなし
+                    ' 隙間だがやることなし → 着信待ちへ
+                    If evPtr > dEvN Then Exit Do
+                    GoTo HandleInbound
                 End If
 
-            ' ---- 次の着信を処理 ----
-            ElseIf evPtr <= dEvN Then
+            ' ========================================
+            ' 着信処理
+            ' ========================================
+            Else
+HandleInbound:
+                If evPtr > dEvN Then Exit Do
+
                 Dim arrMin As Long: arrMin = dMin(evPtr)
                 Dim durM   As Long: durM   = dDur(evPtr)
                 evPtr = evPtr + 1
@@ -220,7 +240,7 @@ Skip:
                 Next i
 
                 If found = 0 Then
-                    ' 全員塞がり → 折り返し待ちに積む
+                    ' 全員塞がり → 必ず折り返し待ちへ
                     pendCB = pendCB + 1: newCB = newCB + 1
                     WD wsDetail, detRow, dt, "着信→折り返し待ち", MTS(arrMin), "", "", 0, "", "全員対応中"
                     detRow = detRow + 1
@@ -234,9 +254,6 @@ Skip:
                     WD wsDetail, detRow, dt, "着信受電", MTS(arrMin), MTS(tEnd), MTS(arrMin), durM, MTS(pEnd), "受電→後続処理完了"
                     detRow = detRow + 1
                 End If
-
-            Else
-                Exit Do   ' 着信もなく隙間もない
             End If
 
             If detRow > 50000 Then Exit Do
@@ -248,16 +265,15 @@ Skip:
 
         ' ---- 結果書き込み ----
         With wsResult
-            .Cells(resRow, 2).Value = dt:         .Cells(resRow, 2).NumberFormat = "yyyy/mm/dd"
-            .Cells(resRow, 3).Value = inTotal      ' 着信総数
-            .Cells(resRow, 4).Value = inAns        ' 受電数
-            .Cells(resRow, 5).Value = newCB        ' 新規折り返し待ち
-            .Cells(resRow, 6).Value = cbDone       ' 折り返し発信完了
-            .Cells(resRow, 7).Value = cbQueue      ' 折り返し発信残（繰越）
-            .Cells(resRow, 8).Value = rkDone       ' 連携発信完了
-            .Cells(resRow, 9).Value = rkQueue      ' 連携発信残（繰越）
+            .Cells(resRow, 2).Value = dt: .Cells(resRow, 2).NumberFormat = "yyyy/mm/dd"
+            .Cells(resRow, 3).Value = inTotal   ' 着信総数
+            .Cells(resRow, 4).Value = inAns     ' 受電数
+            .Cells(resRow, 5).Value = newCB     ' 新規折り返し待ち
+            .Cells(resRow, 6).Value = cbDone    ' 折り返し発信完了
+            .Cells(resRow, 7).Value = cbQueue   ' 折り返し発信残（繰越）
+            .Cells(resRow, 8).Value = rkDone    ' 連携発信完了
+            .Cells(resRow, 9).Value = rkQueue   ' 連携発信残（繰越）
 
-            ' 稼働率
             Dim busy As Double: busy = 0
             For i = 1 To numOp
                 If opFree(i) > dayStart Then busy = busy + (opFree(i) - dayStart)
@@ -266,7 +282,6 @@ Skip:
             If cap > 0 Then .Cells(resRow, 10).Value = Round(busy / cap * 100, 1)
             .Cells(resRow, 10).NumberFormat = "0.0"
 
-            ' 交互背景
             If resRow Mod 2 = 0 Then
                 For i = 2 To 10: .Cells(resRow, i).Interior.Color = RGB(235, 243, 255): Next i
             End If
@@ -300,7 +315,6 @@ End Sub
 ' ユーティリティ
 ' =====================================================================
 
-' シングルクォート除去・トリム・'"'→空文字
 Function CQ(s As String) As String
     s = Replace(s, "'", "")
     s = Trim(s)
@@ -308,7 +322,6 @@ Function CQ(s As String) As String
     CQ = s
 End Function
 
-' 末尾7桁数字抽出
 Function L7(s As String) As String
     Dim cl As String: cl = ""
     Dim c As Long
@@ -319,7 +332,6 @@ Function L7(s As String) As String
     If Len(cl) >= 7 Then L7 = Right(cl, 7) Else L7 = cl
 End Function
 
-' "hh:mm" → 分
 Function HMtoMin(hhmm As String) As Long
     On Error Resume Next
     Dim p() As String: p = Split(hhmm, ":")
@@ -327,17 +339,15 @@ Function HMtoMin(hhmm As String) As Long
     On Error GoTo 0
 End Function
 
-' 分 → "hh:mm"
 Function MTS(m As Long) As String
     If m <= 0 Then MTS = "" Else MTS = Format(m \ 60, "00") & ":" & Format(m Mod 60, "00")
 End Function
 
-' 明細書き込み
 Sub WD(ws As Worksheet, r As Long, dt As Date, evType As String, _
        stTime As String, edTime As String, origTime As String, _
        dur As Long, postTime As String, memo As String)
     With ws
-        .Cells(r, 2).Value = dt:      .Cells(r, 2).NumberFormat = "yyyy/mm/dd"
+        .Cells(r, 2).Value = dt: .Cells(r, 2).NumberFormat = "yyyy/mm/dd"
         .Cells(r, 3).Value = evType
         .Cells(r, 4).Value = stTime
         .Cells(r, 5).Value = edTime
