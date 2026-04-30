@@ -1,3 +1,1 @@
-Debug.Print InStr(ThisWorkbook.Sheets("Data").Cells(3, 12).Value, Chr(8595))
-
-Debug.Print Len(ThisWorkbook.Sheets("Data").Cells(3, 12).Value)
+Debug.Print Asc(Mid(ThisWorkbook.Sheets("Data").Cells(3, 12).Value, 1, 1))
