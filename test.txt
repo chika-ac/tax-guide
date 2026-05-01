@@ -1,1 +1,1 @@
-? ThisWorkbook.Sheets("データ").Cells(2,10).Value
+? Asc(Mid(ThisWorkbook.Sheets("データ").Cells(2,10).Value, 5, 1))
