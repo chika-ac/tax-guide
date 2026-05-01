@@ -1,7 +1,95 @@
-Dim splitChar As String
-If InStr(cv, Chr(12288)) > 0 Then
-    splitChar = Chr(12288)
-Else
-    splitChar = " "
-End If
-Dim big As String: big = Trim(Split(cv, splitChar)(0))
+Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
+    Dim ws As Worksheet: Set ws = ThisWorkbook.Sheets(S_CAT_WEEK)
+    ws.Cells.Clear
+    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
+    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Sub
+
+    Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
+    Dim colC As Long: colC = ColIdx(dws, "業務分類詳細")
+    If colD = 0 Or colC = 0 Then Exit Sub
+
+    Dim thisMonday As Date: thisMonday = WeekMon(dtE)
+    Dim lastMonday As Date: lastMonday = thisMonday - 7
+    Dim thisSunday As Date: thisSunday = thisMonday + 6
+    Dim lastSunday As Date: lastSunday = lastMonday + 6
+
+    Dim thisCnt As Object: Set thisCnt = CreateObject("Scripting.Dictionary")
+    Dim lastCnt As Object: Set lastCnt = CreateObject("Scripting.Dictionary")
+    Dim bigOrder As New Collection
+    Dim bigSet   As Object: Set bigSet = CreateObject("Scripting.Dictionary")
+
+    Dim r As Long
+    For r = 2 To lastRow
+        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip5
+        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
+        Dim cv As String: cv = Trim(CStr(dws.Cells(r, colC).Value))
+        If cv = "" Or cv = "Empty" Then GoTo Skip5
+
+        ' 区切り文字を自動判定して大分類を取得
+        Dim big As String
+        Dim pos As Long
+        pos = InStr(cv, Chr(12288))
+        If pos > 0 Then
+            big = Trim(Left(cv, pos - 1))
+        ElseIf InStr(cv, " ") > 0 Then
+            big = Trim(Left(cv, InStr(cv, " ") - 1))
+        Else
+            big = Trim(cv)
+        End If
+
+        If Not bigSet.Exists(big) Then bigSet.Add big, True: bigOrder.Add big
+        If d >= thisMonday And d <= thisSunday Then
+            thisCnt(big) = IIf(thisCnt.Exists(big), thisCnt(big) + 1, 1)
+        End If
+        If d >= lastMonday And d <= lastSunday Then
+            lastCnt(big) = IIf(lastCnt.Exists(big), lastCnt(big) + 1, 1)
+        End If
+Skip5:
+    Next r
+
+    StyleTitle ws, "カテゴリー別（週比較）", dtS, dtE
+
+    Dim thisLbl As String
+    Dim lastLbl As String
+    thisLbl = "今週（" & Month(thisMonday) & "/" & Day(thisMonday) & "～" & Month(thisSunday) & "/" & Day(thisSunday) & "）"
+    lastLbl = "先週（" & Month(lastMonday) & "/" & Day(lastMonday) & "～" & Month(lastSunday) & "/" & Day(lastSunday) & "）"
+
+    ws.Cells(2, 1).Value = "大分類"
+    ws.Cells(2, 2).Value = thisLbl
+    ws.Cells(2, 3).Value = lastLbl
+    ws.Cells(2, 4).Value = "差分"
+    StyleHeader ws, 2, 4
+    ws.Rows(2).RowHeight = 36
+
+    Dim rOut As Long: rOut = 3
+    Dim bk As Variant
+    For Each bk In bigOrder
+        Dim tc As Long: tc = IIf(thisCnt.Exists(bk), thisCnt(bk), 0)
+        Dim lc As Long: lc = IIf(lastCnt.Exists(bk), lastCnt(bk), 0)
+        Dim df As Long: df = tc - lc
+        ws.Cells(rOut, 1).Value = bk
+        ws.Cells(rOut, 2).Value = tc
+        ws.Cells(rOut, 3).Value = lc
+        ws.Cells(rOut, 4).Value = df
+        ColorDiff ws.Cells(rOut, 4), df
+        rOut = rOut + 1
+    Next bk
+
+    ws.Cells(rOut, 1).Value = "合計"
+    ws.Cells(rOut, 2).Value = "=SUM(" & ws.Cells(3, 2).Address(False, False) & ":" & ws.Cells(rOut - 1, 2).Address(False, False) & ")"
+    ws.Cells(rOut, 3).Value = "=SUM(" & ws.Cells(3, 3).Address(False, False) & ":" & ws.Cells(rOut - 1, 3).Address(False, False) & ")"
+    ws.Cells(rOut, 4).Value = "=" & ws.Cells(rOut, 2).Address(False, False) & "-" & ws.Cells(rOut, 3).Address(False, False)
+    StyleData ws, 3, rOut - 1, 1, 4
+    StyleTotal ws, rOut, 1, 4
+
+    rOut = rOut + 2
+    ws.Cells(rOut, 1).Value = "【週の判定基準】終了日（" & Format(dtE, "m/d") & "）を含む週を今週とします。差分 = 今週 - 先週"
+    With ws.Cells(rOut, 1).Font
+        .Name = "Meiryo UI": .Size = 9: .Color = RGB(100, 100, 100): .Italic = True
+    End With
+
+    AutoFitSheet ws
+    ws.Columns(1).ColumnWidth = 24
+    ws.Columns(2).ColumnWidth = 22
+    ws.Columns(3).ColumnWidth =
