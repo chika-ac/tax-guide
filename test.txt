@@ -27,3 +27,16 @@ Sub ImportCSV()
 NextLine:
     Loop
     ts.Close
+
+    With ws.Rows(1)
+        .Font.Bold = True
+        .Font.Name = "Meiryo UI"
+        .Font.Color = RGB(255, 255, 255)
+        .Interior.Color = RGB(31, 56, 100)
+        .HorizontalAlignment = xlCenter
+        .RowHeight = 28
+    End With
+    ws.Rows(1).AutoFilter
+    ws.Columns("A:W").AutoFit
+    MsgBox "CSV取り込み完了！  " & (ln - 2) & " 件", vbInformation
+End Sub
