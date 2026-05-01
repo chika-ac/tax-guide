@@ -1,9 +1,31 @@
-Function SplitCSV(s As String) As String()
-    Dim res() As String
-    res = Split(s, ",")
-    Dim i As Integer
-    For i = 0 To UBound(res)
-        res(i) = Replace(res(i), Chr(34), "")
+' ファイルを丸ごとバイナリで読む
+    Dim fileNo As Integer: fileNo = FreeFile
+    Dim allText As String
+    Open fPath For Binary As #fileNo
+    Dim buf As String: buf = Space(LOF(fileNo))
+    Get #fileNo, , buf
+    Close #fileNo
+
+    ' フィールド内改行を一時的に置換（ダブルクォート内のLFを変換）
+    Dim inQ As Boolean: inQ = False
+    Dim cleanBuf As String: cleanBuf = ""
+    Dim i As Long
+    For i = 1 To Len(buf)
+        Dim ch As String: ch = Mid(buf, i, 1)
+        If ch = Chr(34) Then
+            inQ = Not inQ
+        End If
+        If (ch = vbLf Or ch = vbCr) And inQ Then
+            cleanBuf = cleanBuf & " "  ' フィールド内改行をスペースに置換
+        Else
+            cleanBuf = cleanBuf & ch
+        End If
     Next i
-    SplitCSV = res
-End Function
+
+    ' CR・LFを統一
+    cleanBuf = Replace(cleanBuf, vbCrLf, vbLf)
+    cleanBuf = Replace(cleanBuf, vbCr, vbLf)
+
+    ' 行に分割
+    Dim lines() As String
+    lines = Split(cleanBuf, vbLf)
