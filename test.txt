@@ -1,2 +1,4 @@
-MsgBox "lineStr:[" & lineStr & "]" & vbCrLf & "UBound:" & UBound(cols) & vbCrLf & "cols(0):[" & cols(0) & "]"
-Exit Sub
+For i = 0 To UBound(cols)
+    ws.Cells(ln, i + 1).NumberFormat = "@"
+    ws.Cells(ln, i + 1).Value = Trim(cols(i))
+Next i
