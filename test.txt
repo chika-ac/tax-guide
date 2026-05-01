@@ -1,3 +1,126 @@
+Sub BuildCatDetailSheet(dtS As Date, dtE As Date)
+    Dim ws As Worksheet: Set ws = ThisWorkbook.Sheets(S_CAT_DTL)
+    ws.Cells.Clear
+    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
+    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Sub
+
+    Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
+    Dim colC As Long: colC = ColIdx(dws, "業務分類詳細")
+    If colD = 0 Or colC = 0 Then Exit Sub
+
+    Dim counts     As Object: Set counts     = CreateObject("Scripting.Dictionary")
+    Dim bigOrder   As New Collection
+    Dim bigSet     As Object: Set bigSet     = CreateObject("Scripting.Dictionary")
+    Dim smallOrder As New Collection
+    Dim smallSet   As Object: Set smallSet   = CreateObject("Scripting.Dictionary")
+    Dim dateOrder  As New Collection
+    Dim dateSet    As Object: Set dateSet    = CreateObject("Scripting.Dictionary")
+
+    Dim r As Long
+    For r = 2 To lastRow
+        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip2
+        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
+        If d < dtS Or d > dtE Then GoTo Skip2
+        Dim lbl As String: lbl = DateLabel(d)
+        Dim cv As String: cv = Trim(CStr(dws.Cells(r, colC).Value))
+        If cv = "" Or cv = "Empty" Then GoTo Skip2
+
+        ' 区切り文字を自動判定
+        Dim big   As String
+        Dim small As String
+        Dim pos   As Long
+        pos = InStr(cv, Chr(12288))
+        If pos > 0 Then
+            big   = Trim(Left(cv, pos - 1))
+            small = Trim(Mid(cv, pos + 1))
+        ElseIf InStr(cv, " ") > 0 Then
+            pos   = InStr(cv, " ")
+            big   = Trim(Left(cv, pos - 1))
+            small = Trim(Mid(cv, pos + 1))
+        Else
+            big   = Trim(cv)
+            small = "（その他）"
+        End If
+
+        Dim kbs As String: kbs = big & Chr(9) & small
+        Dim kf  As String: kf  = kbs & Chr(9) & lbl
+
+        If Not bigSet.Exists(big)   Then bigSet.Add big, True:   bigOrder.Add big
+        If Not smallSet.Exists(kbs) Then smallSet.Add kbs, big:  smallOrder.Add kbs
+        If Not dateSet.Exists(lbl)  Then dateSet.Add lbl, True:  dateOrder.Add lbl
+        counts(kf) = IIf(counts.Exists(kf), counts(kf) + 1, 1)
+Skip2:
+    Next r
+
+    StyleTitle ws, "カテゴリー別詳細", dtS, dtE
+    ws.Cells(2, 1).Value = "大分類"
+    ws.Cells(2, 2).Value = "小分類"
+    Dim col As Long: col = 3
+    Dim dk As Variant
+    For Each dk In dateOrder
+        ws.Cells(2, col).Value = dk: col = col + 1
+    Next dk
+    Dim tcol As Long: tcol = col
+    ws.Cells(2, tcol).Value = "合計"
+    StyleHeader ws, 2, tcol
+
+    Dim rOut As Long: rOut = 3
+    Dim bk As Variant
+    For Each bk In bigOrder
+        Dim first As Boolean: first = True
+        Dim sk As Variant
+        For Each sk In smallOrder
+            If smallSet(sk) = bk Then
+                Dim pp() As String: pp = Split(sk, Chr(9))
+                If first Then ws.Cells(rOut, 1).Value = pp(0): first = False
+                ws.Cells(rOut, 2).Value = pp(1)
+                col = 3
+                For Each dk In dateOrder
+                    Dim kf2 As String: kf2 = sk & Chr(9) & dk
+                    ws.Cells(rOut, col).Value = IIf(counts.Exists(kf2), counts(kf2), 0)
+                    col = col + 1
+                Next dk
+                ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 3).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+                rOut = rOut + 1
+            End If
+        Next sk
+    Next bk
+
+    ws.Cells(rOut, 1).Value = "合計"
+    col = 3
+    For Each dk In dateOrder
+        ws.Cells(rOut, col).Value = "=SUM(" & ws.Cells(3, col).Address(False, False) & ":" & ws.Cells(rOut - 1, col).Address(False, False) & ")"
+        col = col + 1
+    Next dk
+    ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 3).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+    StyleData ws, 3, rOut - 1, 1, tcol
+    StyleTotal ws, rOut, 1, tcol
+
+    Dim rr As Long
+    For rr = 3 To rOut - 1
+        If Trim(ws.Cells(rr, 1).Value) <> "" Then
+            ws.Cells(rr, 1).Interior.Color = RGB(214, 228, 247)
+            ws.Cells(rr, 1).Font.Bold = True
+        End If
+    Next rr
+
+    Dim ms As Long: ms = 3
+    Dim cb As String: cb = ws.Cells(3, 1).Value
+    For rr = 4 To rOut
+        Dim cv2 As String: cv2 = Trim(ws.Cells(rr, 1).Value)
+        If cv2 <> "" And cv2 <> cb Then
+            If rr - 1 > ms Then
+                ws.Range(ws.Cells(ms, 1), ws.Cells(rr - 1, 1)).Merge
+                ws.Cells(ms, 1).VerticalAlignment = xlCenter
+                ws.Cells(ms, 1).HorizontalAlignment = xlCenter
+            End If
+            ms = rr: cb = cv2
+        End If
+    Next rr
+    AutoFitSheet ws
+End Sub
+
 Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
     Dim ws As Worksheet: Set ws = ThisWorkbook.Sheets(S_CAT_WEEK)
     ws.Cells.Clear
@@ -14,10 +137,10 @@ Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
     Dim thisSunday As Date: thisSunday = thisMonday + 6
     Dim lastSunday As Date: lastSunday = lastMonday + 6
 
-    Dim thisCnt As Object: Set thisCnt = CreateObject("Scripting.Dictionary")
-    Dim lastCnt As Object: Set lastCnt = CreateObject("Scripting.Dictionary")
+    Dim thisCnt  As Object: Set thisCnt  = CreateObject("Scripting.Dictionary")
+    Dim lastCnt  As Object: Set lastCnt  = CreateObject("Scripting.Dictionary")
     Dim bigOrder As New Collection
-    Dim bigSet   As Object: Set bigSet = CreateObject("Scripting.Dictionary")
+    Dim bigSet   As Object: Set bigSet   = CreateObject("Scripting.Dictionary")
 
     Dim r As Long
     For r = 2 To lastRow
