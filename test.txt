@@ -1,12 +1,7 @@
-Dim p() As String
 Dim splitChar As String
 If InStr(cv, Chr(12288)) > 0 Then
     splitChar = Chr(12288)
-ElseIf InStr(cv, " ") > 0 Then
-    splitChar = " "
 Else
     splitChar = " "
 End If
-p = Split(cv, splitChar)
-Dim big   As String: big   = Trim(p(0))
-Dim small As String: small = IIf(UBound(p) >= 1, Trim(p(1)), "（その他）")
+Dim big As String: big = Trim(Split(cv, splitChar)(0))
