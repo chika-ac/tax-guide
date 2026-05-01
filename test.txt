@@ -1,1 +1,4 @@
 ? AscW(Mid(ThisWorkbook.Sheets("データ").Cells(2,10).Value, 5, 1))
+
+
+? InStr(ThisWorkbook.Sheets("データ").Cells(2,10).Value, ChrW(12288))
