@@ -1,24 +1,29 @@
-Fallback:
-    On Error GoTo 0
+Sub ImportCSV()
+    Dim fPath As String
+    fPath = Application.GetOpenFilename("CSVファイル,*.csv", , "CSVを選択してください")
+    If fPath = "False" Then Exit Sub
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets(DATA_SHEET)
+    ws.Cells.ClearContents
+    ws.Cells.ClearFormats
+
     Dim fso As Object, ts As Object
     Set fso = CreateObject("Scripting.FileSystemObject")
     Set ts = fso.OpenTextFile(fPath, 1, False, -2)
+
     Dim ln As Long: ln = 1
     Do While Not ts.AtEndOfStream
         Dim lineStr As String
         lineStr = ts.ReadLine
-        If Trim(lineStr) = "" Then GoTo NextLine   ' 空行スキップ
+        If Trim(lineStr) = "" Then GoTo NextLine
         Dim cols() As String
         cols = SplitCSV(lineStr)
         Dim i As Integer
         For i = 0 To UBound(cols)
-            If Trim(cols(i)) <> "" Then
-                ws.Cells(ln, i + 1).Value = Trim(cols(i))
-            End If
+            ws.Cells(ln, i + 1).Value = Trim(cols(i))
         Next i
         ln = ln + 1
 NextLine:
     Loop
     ts.Close
-    r = ln
-    GoTo Done
