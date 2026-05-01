@@ -1,54 +1,9 @@
-Sub ImportCSV()
-    Dim fPath As String
-    fPath = Application.GetOpenFilename("CSVファイル,*.csv", , "CSVを選択してください")
-    If fPath = "False" Then Exit Sub
-
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Sheets(DATA_SHEET)
-    ws.Cells.ClearContents
-    ws.Cells.ClearFormats
-
-    ' ファイルを丸ごとバイナリで読む
-    Dim fileNo As Integer: fileNo = FreeFile
-    Dim allText As String
-    Open fPath For Binary As #fileNo
-    Dim buf As String: buf = Space(LOF(fileNo))
-    Get #fileNo, , buf
-    Close #fileNo
-
-    ' CR・LFを統一してCRLFに
-    buf = Replace(buf, vbCrLf, vbLf)
-    buf = Replace(buf, vbCr, vbLf)
-
-    ' 行に分割
-    Dim lines() As String
-    lines = Split(buf, vbLf)
-
-    Dim ln As Long: ln = 1
-    Dim li As Long
-    For li = 0 To UBound(lines)
-        Dim lineStr As String: lineStr = Trim(lines(li))
-        If lineStr = "" Then GoTo NextLine
-        Dim cols() As String
-        cols = SplitCSV(lineStr)
-        Dim i As Integer
-        For i = 0 To UBound(cols)
-            ws.Cells(ln, i + 1).NumberFormat = "@"
-            ws.Cells(ln, i + 1).Value = Trim(cols(i))
-        Next i
-        ln = ln + 1
-NextLine:
-    Next li
-
-    With ws.Rows(1)
-        .Font.Bold = True
-        .Font.Name = "Meiryo UI"
-        .Font.Color = RGB(255, 255, 255)
-        .Interior.Color = RGB(31, 56, 100)
-        .HorizontalAlignment = xlCenter
-        .RowHeight = 28
-    End With
-    ws.Rows(1).AutoFilter
-    ws.Columns("A:W").AutoFit
-    MsgBox "CSV取り込み完了！  " & (ln - 2) & " 件", vbInformation
-End Sub
+Function SplitCSV(s As String) As String()
+    Dim res() As String
+    res = Split(s, ",")
+    Dim i As Integer
+    For i = 0 To UBound(res)
+        res(i) = Replace(res(i), Chr(34), "")
+    Next i
+    SplitCSV = res
+End Function
