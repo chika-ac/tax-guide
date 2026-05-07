@@ -1,5 +1,5 @@
 ' ============================================================
-' 職員情報データ取込・チェック自動化 VBAコード【新バージョン】
+' 職員情報データ取込・チェック自動化 VBAコード【新バージョン 最新】
 ' ============================================================
 ' 【シート構成】
 ' 　作業手順書
@@ -22,7 +22,7 @@
 ' ============================================================
 '
 ' ============================================================
-' ⑦チェック設定シートの設定方法
+' チェック設定シートの設定方法
 ' ============================================================
 ' 【Access_1チェック設定】（4行目以降）
 '   A列：データ種別（"Access_1"固定）
@@ -34,19 +34,24 @@
 '   G列：備考
 '   H列：確認手順
 '
-' 【Access_2確認手順】
+' 【ファイル名設定】
 '   チェック設定表の下部に以下を追記：
+'   A列：【ファイル名設定】← このラベル
+'   次の行以降：
+'   A列：Access_1　B列：職員基本情報.xlsx
+'   A列：Access_2　B列：職員資格情報.xlsx
+'   A列：Access_3　B列：〇〇.xlsx
+'   ・・・（空行で終了）
+'
+' 【Access_2確認手順】
 '   A列：【Access_2確認手順】← このラベル
 '   次の行：確認内容（Alt+Enterで改行可）
 '
 ' 【引用一覧設定】（Access_3〜23用）
-'   チェック設定表の下部に以下を追記：
 '   A列：【引用一覧設定】← このラベル
 '   次の行以降：
-'   A列：シート名（例：Access_3）
-'   B列：引用列（カンマ区切り、例：A,B,C,D）
-'   C列：確認手順
-'   ※ 空行が出たら終了
+'   A列：シート名　B列：引用列（例：A,B,C,D）　C列：確認手順
+'   ・・・（空行で終了）
 ' ============================================================
 
 ' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
@@ -65,11 +70,6 @@ Const SHEET_RESULT  As String = "チェック結果"
 ' Access_1〜23のシート名プレフィックス
 Const ACCESS_PREFIX As String = "Access_"
 
-' Accessが出力するExcelファイル名のプレフィックスと拡張子
-' ファイル名：Access出力_1.xlsx〜Access出力_23.xlsx
-Const FILE_PREFIX   As String = "Access出力_"
-Const FILE_EXT      As String = ".xlsx"
-
 ' Accessデータのシート数
 Const ACCESS_COUNT  As Long = 23
 
@@ -85,10 +85,11 @@ Sub リセット()
     If MsgBox("前回のデータとチェック結果をすべてクリアします。よろしいですか？", _
               vbYesNo + vbQuestion, "リセット確認") = vbNo Then Exit Sub
 
-    Dim ws   As Worksheet
-    Dim ws8  As Worksheet
-    Dim wsM  As Worksheet
-    Dim i    As Long
+    Dim ws       As Worksheet
+    Dim ws8      As Worksheet
+    Dim wsM      As Worksheet
+    Dim i        As Long
+    Dim j        As Integer
     Dim lastRow8 As Long
 
     Set ws8 = ThisWorkbook.Sheets(SHEET_RESULT)
@@ -124,7 +125,6 @@ Sub リセット()
     ws8.Range("I3").MergeArea.Font.Bold      = False
 
     ' 手順書の完了チェックをクリア
-    Dim j As Integer
     For j = 4 To 9
         wsM.Cells(j, 8).Value = "□"
     Next j
@@ -177,8 +177,16 @@ Private Sub Accessデータ読込(ByVal fileNo As Long)
     Dim r            As Long
     Dim c            As Long
 
-    fileName    = FILE_PREFIX & fileNo & FILE_EXT
     targetSheet = ACCESS_PREFIX & fileNo
+
+    ' チェック設定シートからファイル名を取得
+    fileName = ファイル名取得(fileNo)
+    If fileName = "" Then
+        MsgBox "【エラー】ファイル名設定が見つかりません。" & vbCrLf & vbCrLf & _
+               "チェック設定シートの【ファイル名設定】を確認してください。" & vbCrLf & _
+               "対象：" & targetSheet, vbExclamation, "設定なし"
+        Exit Sub
+    End If
 
     downloadPath = Environ("USERPROFILE") & "\Downloads\"
     fullPath     = downloadPath & fileName
@@ -269,27 +277,27 @@ Sub チェック実行()
     configLastRow = wsConfig.Cells(wsConfig.Rows.Count, 1).End(xlUp).Row
 
     ' 変数宣言
-    Dim resultRow1  As Long
-    Dim resultRow2  As Long
-    Dim resultRow3  As Long
-    Dim totalNG     As Long
-    Dim totalCheck  As Long
-    Dim i           As Long
-    Dim dataKind    As String
-    Dim colName     As String
-    Dim checkType   As String
-    Dim cond1       As String
-    Dim cond2       As String
-    Dim confirmNote As String
-    Dim targetCol   As Long
-    Dim headerRow   As Long
-    Dim dataStartRow As Long
-    Dim dataLastRow  As Long
+    Dim resultRow1    As Long
+    Dim resultRow2    As Long
+    Dim resultRow3    As Long
+    Dim totalNG       As Long
+    Dim totalCheck    As Long
+    Dim i             As Long
+    Dim dataKind      As String
+    Dim colName       As String
+    Dim checkType     As String
+    Dim cond1         As String
+    Dim cond2         As String
+    Dim confirmNote   As String
+    Dim targetCol     As Long
+    Dim headerRow     As Long
+    Dim dataStartRow  As Long
+    Dim dataLastRow   As Long
     Dim lastColTarget As Long
-    Dim totalRows   As Long
-    Dim ngCount     As Long
-    Dim ngValues    As Object
-    Dim wsTarget    As Worksheet
+    Dim totalRows     As Long
+    Dim ngCount       As Long
+    Dim ngValues      As Object
+    Dim wsTarget      As Worksheet
 
     totalNG    = 0
     totalCheck = 0
@@ -585,6 +593,57 @@ Private Sub チェック実行処理(ByVal wsTarget As Worksheet, _
 End Sub
 
 ' ============================================================
+' チェック設定シートからメモを取得する共通処理
+' ============================================================
+Private Function 設定メモ取得(ByVal wsConfig As Worksheet, _
+                               ByVal label As String) As String
+    Dim memoRow As Long
+    設定メモ取得 = ""
+    For memoRow = 1 To wsConfig.Rows.Count
+        If InStr(wsConfig.Cells(memoRow, 1).Value, label) > 0 Then
+            設定メモ取得 = wsConfig.Cells(memoRow + 1, 1).Value
+            Exit For
+        End If
+    Next memoRow
+End Function
+
+' ============================================================
+' チェック設定シートからファイル名を取得する処理
+' ============================================================
+Private Function ファイル名取得(ByVal fileNo As Long) As String
+
+    Dim wsConfig    As Worksheet
+    Dim memoRow     As Long
+    Dim settingRow  As Long
+    Dim sheetName   As String
+
+    Set wsConfig = ThisWorkbook.Sheets(SHEET_CONFIG)
+    ファイル名取得 = ""
+
+    ' 【ファイル名設定】ラベルを探す
+    settingRow = 0
+    For memoRow = 1 To wsConfig.Rows.Count
+        If InStr(wsConfig.Cells(memoRow, 1).Value, "ファイル名設定") > 0 Then
+            settingRow = memoRow + 1
+            Exit For
+        End If
+    Next memoRow
+
+    If settingRow = 0 Then Exit Function
+
+    ' シート名が一致する行のファイル名を返す
+    sheetName = ACCESS_PREFIX & fileNo
+    Do While wsConfig.Cells(settingRow, 1).Value <> ""
+        If Trim(wsConfig.Cells(settingRow, 1).Value) = sheetName Then
+            ファイル名取得 = Trim(wsConfig.Cells(settingRow, 2).Value)
+            Exit Function
+        End If
+        settingRow = settingRow + 1
+    Loop
+
+End Function
+
+' ============================================================
 ' Access_2 B列重複チェック
 ' 重複している行をすべて展開して表示
 ' ============================================================
@@ -673,11 +732,11 @@ Private Sub Access2重複チェック(ByRef wsResult As Worksheet, _
                 .Cells(resultRow, 6).Value  = ""
             End If
 
-            .Cells(resultRow, 7).Value  = ngVal(0)   ' 申請番号
-            .Cells(resultRow, 8).Value  = ngVal(1)   ' 職員番号
-            .Cells(resultRow, 9).Value  = ngVal(2)   ' 氏名
-            .Cells(resultRow, 10).Value = ngVal(3)   ' NG値
-            .Cells(resultRow, 11).Value = confirmNote ' 確認手順
+            .Cells(resultRow, 7).Value  = ngVal(0)
+            .Cells(resultRow, 8).Value  = ngVal(1)
+            .Cells(resultRow, 9).Value  = ngVal(2)
+            .Cells(resultRow, 10).Value = ngVal(3)
+            .Cells(resultRow, 11).Value = confirmNote
             .Cells(resultRow, 12).Value = "□"
 
             Call NG行書式設定(wsResult, resultRow, COL_NG2)
@@ -709,6 +768,9 @@ Private Sub Access引用一覧全描画(ByRef wsResult As Worksheet, _
     Dim idx         As Long
     Dim colLetter   As String
     Dim colNum      As Long
+    Dim ci          As Integer
+    Dim ws          As Worksheet
+    Dim wsExists    As Boolean
 
     ' 【引用一覧設定】ラベルを探す
     settingRow = 0
@@ -729,9 +791,7 @@ Private Sub Access引用一覧全描画(ByRef wsResult As Worksheet, _
         confirmNote = wsConfig.Cells(settingRow, 3).Value
 
         ' シートが存在するか確認
-        Dim wsExists As Boolean
         wsExists = False
-        Dim ws As Worksheet
         For Each ws In ThisWorkbook.Sheets
             If ws.Name = sheetName Then
                 wsExists = True
@@ -749,17 +809,16 @@ Private Sub Access引用一覧全描画(ByRef wsResult As Worksheet, _
 
             For idx = 0 To colCount - 1
                 colLetter = Trim(colArr(idx))
-                ' 列文字を列番号に変換
-                colNum = 0
-                Dim ci As Integer
+                colNum    = 0
                 For ci = 1 To Len(colLetter)
-                    colNum = colNum * 26 + (Asc(UCase(Mid(colLetter, ci, 1))) - Asc("A") + 1)
+                    colNum = colNum * 26 + _
+                             (Asc(UCase(Mid(colLetter, ci, 1))) - Asc("A") + 1)
                 Next ci
                 quoteCols(idx) = colNum
             Next idx
 
             ' 引用一覧を描画
-            Call 引用一覧描画(wsResult, resultRow, wsConfig, sheetName, _
+            Call 引用一覧描画(wsResult, resultRow, sheetName, _
                              "▼ " & sheetName & " 引用一覧", _
                              confirmNote, quoteCols, colCount)
         End If
@@ -774,7 +833,6 @@ End Sub
 ' ============================================================
 Private Sub 引用一覧描画(ByRef wsResult As Worksheet, _
                           ByRef resultRow As Long, _
-                          ByVal wsConfig As Worksheet, _
                           ByVal sheetName As String, _
                           ByVal sectionTitle As String, _
                           ByVal confirmNote As String, _
@@ -892,21 +950,6 @@ Private Sub 引用一覧描画(ByRef wsResult As Worksheet, _
         resultRow   = resultRow + 1
     Next k
 End Sub
-
-' ============================================================
-' チェック設定シートからメモを取得する共通処理
-' ============================================================
-Private Function 設定メモ取得(ByVal wsConfig As Worksheet, _
-                               ByVal label As String) As String
-    Dim memoRow As Long
-    設定メモ取得 = ""
-    For memoRow = 1 To wsConfig.Rows.Count
-        If InStr(wsConfig.Cells(memoRow, 1).Value, label) > 0 Then
-            設定メモ取得 = wsConfig.Cells(memoRow + 1, 1).Value
-            Exit For
-        End If
-    Next memoRow
-End Function
 
 ' ============================================================
 ' NG行出力（型1：申請番号・職員番号・氏名・NG値・確認手順・済）
@@ -1083,30 +1126,22 @@ End Sub
 'Private Sub Worksheet_SelectionChange(ByVal Target As Range)
 '
 '    ' 済チェックはEnterキーで□→OKに切り替わります
-'    ' ※ 済列の列番号はシートごとに異なるため
-'    '   「済」という文字がヘッダーにある列を動的に判定しています
+'    ' 「済」というヘッダーがある列を動的に検索するため
+'    ' 列番号の指定は不要です
 '
 '    If Target.Row < 5 Then Exit Sub
 '    If Target.Value <> "□" Then Exit Sub
 '
-'    ' ヘッダー行（4行目）で同じ列が「済」かどうか確認
-'    Dim headerVal As String
-'    headerVal = ""
-'
-'    ' 4行目から上に向かって「済」ヘッダーを探す
+'    ' 上方向に「済」ヘッダーを探す
 '    Dim r As Long
 '    For r = Target.Row - 1 To 1 Step -1
 '        If Cells(r, Target.Column).Value = "済" Then
-'            headerVal = "済"
+'            Application.EnableEvents = False
+'            Target.Value = "OK"
+'            Target.Interior.Color = RGB(198, 239, 206)
+'            Application.EnableEvents = True
 '            Exit For
 '        End If
 '    Next r
-'
-'    If headerVal = "済" Then
-'        Application.EnableEvents = False
-'        Target.Value = "OK"
-'        Target.Interior.Color = RGB(198, 239, 206)
-'        Application.EnableEvents = True
-'    End If
 '
 'End Sub
