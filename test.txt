@@ -1,5 +1,5 @@
 ' ============================================================
-' 職員情報データ取込・チェック自動化 VBAコード【完成版 最新】
+' 職員情報データ取込・チェック自動化 VBAコード【決定版 最新】
 ' ============================================================
 ' 【貼り付け手順】
 ' ＜標準モジュール＞
@@ -13,6 +13,19 @@
 '    ※ コメントアウト（行頭の '）を外して貼り付けてください
 '
 ' 6. Ctrl+S で保存
+' ============================================================
+'
+' ============================================================
+' ⑦チェック設定シートの設定方法
+' ============================================================
+' チェック設定表の下部に以下を追記してください：
+'
+' 【Accessデータ④確認手順】　← A列にこのラベルを入力
+' （次の行のA列に確認内容を入力。Alt+Enterで改行可能）
+'
+' 同様に以下も設定可能です：
+' 【Accessデータ②目視確認ポイント】
+' 【Accessデータ③目視確認ポイント】
 ' ============================================================
 
 ' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
@@ -44,7 +57,7 @@ Const QUOTE_COL_ACCESS2 As Long = 8  ' A,B,C,E,F,G,H,J
 Const QUOTE_COL_ACCESS3 As Long = 4  ' A,B,C,D
 
 ' チェック結果各セクションの列数（済チェック含む）
-Const COL_NG1  As Long = 12  ' ①・④・②I列NG一覧
+Const COL_NG1  As Long = 12  ' ①・②I列・④NG一覧
 Const COL_NG2  As Long = 10  ' ②・SQL NG一覧
 Const COL_REF2 As Long = 9   ' ②引用一覧（8列+済）
 Const COL_REF3 As Long = 5   ' ③引用一覧（4列+済）
@@ -57,14 +70,15 @@ Sub リセット()
     If MsgBox("前回のデータとチェック結果をすべてクリアします。よろしいですか？", _
               vbYesNo + vbQuestion, "リセット確認") = vbNo Then Exit Sub
 
-    Dim ws1 As Worksheet
-    Dim ws2 As Worksheet
-    Dim ws3 As Worksheet
-    Dim ws4 As Worksheet
-    Dim ws5 As Worksheet
-    Dim ws8 As Worksheet
-    Dim wsM As Worksheet
-    Dim i   As Integer
+    Dim ws1     As Worksheet
+    Dim ws2     As Worksheet
+    Dim ws3     As Worksheet
+    Dim ws4     As Worksheet
+    Dim ws5     As Worksheet
+    Dim ws8     As Worksheet
+    Dim wsM     As Worksheet
+    Dim i       As Integer
+    Dim lastRow8 As Long
 
     Set ws1 = ThisWorkbook.Sheets(SHEET_ACCESS1)
     Set ws2 = ThisWorkbook.Sheets(SHEET_ACCESS2)
@@ -83,8 +97,10 @@ Sub リセット()
         ws5.Range("A3:" & ws5.Cells(ws5.Rows.Count, 1).End(xlUp).Address).ClearContents
     End If
 
-    If ws8.Cells(ws8.Rows.Count, 1).End(xlUp).Row > 4 Then
-        ws8.Rows("5:" & ws8.Cells(ws8.Rows.Count, 1).End(xlUp).Row).Delete
+    ' UsedRangeで全体の最終行を取得（列問わず削除漏れ防止）
+    lastRow8 = ws8.UsedRange.Rows(ws8.UsedRange.Rows.Count).Row
+    If lastRow8 > 4 Then
+        ws8.Rows("5:" & lastRow8).Delete
     End If
 
     ws8.Range("D2").MergeArea.ClearContents
@@ -163,6 +179,10 @@ Private Sub Accessデータ読込(ByVal fileNo As Integer)
         Case 4
             fileName    = ACCESS_FILE4
             targetSheet = SHEET_ACCESS4
+        ' ↓ 将来ファイルが増えた場合はここに追加
+        ' Case 5
+        '     fileName    = ACCESS_FILE5
+        '     targetSheet = "⑥Accessデータ⑤"
     End Select
 
     downloadPath = Environ("USERPROFILE") & "\Downloads\"
@@ -245,8 +265,11 @@ Sub チェック実行()
     Set wsResult = ThisWorkbook.Sheets(SHEET_RESULT)
     Set wsConfig = ThisWorkbook.Sheets(SHEET_CONFIG)
 
-    If wsResult.Cells(wsResult.Rows.Count, 1).End(xlUp).Row > 4 Then
-        wsResult.Rows("5:" & wsResult.Cells(wsResult.Rows.Count, 1).End(xlUp).Row).Delete
+    ' チェック結果クリア（UsedRangeで確実に削除）
+    Dim lastRowR As Long
+    lastRowR = wsResult.UsedRange.Rows(wsResult.UsedRange.Rows.Count).Row
+    If lastRowR > 4 Then
+        wsResult.Rows("5:" & lastRowR).Delete
     End If
 
     wsResult.Range("D2").Value        = Now()
@@ -377,7 +400,7 @@ NextConfig1:
     Call ヘッダー行描画(wsResult, sec4Row + 1, sec4Headers, COL_NG1 - 1, RGB(31, 78, 121))
     resultRow4 = sec4Row + 2
 
-    Call Access4チェック(wsResult, resultRow4, totalNG, totalCheck)
+    Call Access4チェック(wsResult, resultRow4, totalNG, totalCheck, wsConfig)
 
     ' ============================================================
     ' ▼ Accessデータ② I列NG一覧セクション
@@ -687,12 +710,29 @@ Private Sub チェック実行処理(ByVal wsTarget As Worksheet, _
 End Sub
 
 ' ============================================================
+' チェック設定シートからメモを取得する共通処理
+' ============================================================
+Private Function 設定メモ取得(ByVal wsConfig As Worksheet, _
+                               ByVal label As String) As String
+    Dim memoRow As Long
+    設定メモ取得 = ""
+    For memoRow = 1 To wsConfig.Rows.Count
+        If InStr(wsConfig.Cells(memoRow, 1).Value, label) > 0 Then
+            設定メモ取得 = wsConfig.Cells(memoRow + 1, 1).Value
+            Exit For
+        End If
+    Next memoRow
+End Function
+
+' ============================================================
 ' Accessデータ④専用チェック（D列「無」ならNG）
+' 確認手順は⑦チェック設定シートの【Accessデータ④確認手順】から取得
 ' ============================================================
 Private Sub Access4チェック(ByRef wsResult As Worksheet, _
                              ByRef resultRow As Long, _
                              ByRef totalNG As Long, _
-                             ByRef totalCheck As Long)
+                             ByRef totalCheck As Long, _
+                             ByVal wsConfig As Worksheet)
     Dim wsAccess4    As Worksheet
     Dim dataStartRow As Long
     Dim dataLastRow  As Long
@@ -702,6 +742,10 @@ Private Sub Access4チェック(ByRef wsResult As Worksheet, _
     Dim ngVal        As Variant
     Dim isFirst      As Boolean
     Dim dVal         As String
+    Dim confirmNote  As String
+
+    ' チェック設定シートから確認手順を取得
+    confirmNote = 設定メモ取得(wsConfig, "Accessデータ④確認手順")
 
     Set wsAccess4 = ThisWorkbook.Sheets(SHEET_ACCESS4)
     dataStartRow  = 3
@@ -752,12 +796,13 @@ Private Sub Access4チェック(ByRef wsResult As Worksheet, _
             .Cells(resultRow, 8).Value  = ngVal(1)
             .Cells(resultRow, 9).Value  = ngVal(2)
             .Cells(resultRow, 10).Value = ngVal(3)
-            .Cells(resultRow, 11).Value = ""
+            .Cells(resultRow, 11).Value = confirmNote
             .Cells(resultRow, 12).Value = "□"
 
             Call NG行書式設定(wsResult, resultRow, COL_NG1)
-            .Cells(resultRow, 6).Font.Color = RGB(192, 0, 0)
-            .Cells(resultRow, 6).Font.Bold  = True
+            .Cells(resultRow, 6).Font.Color  = RGB(192, 0, 0)
+            .Cells(resultRow, 6).Font.Bold   = True
+            .Cells(resultRow, 11).WrapText   = True
         End With
         resultRow = resultRow + 1
     Next ngVal
@@ -982,7 +1027,6 @@ Private Sub Access引用一覧描画(ByRef wsResult As Worksheet, _
     Dim confirmMemo  As String
     Dim memoLines()  As String
     Dim memoLine     As Variant
-    Dim memoRow      As Long
     Dim quoteRowIdx  As Long
 
     Set wsData    = ThisWorkbook.Sheets(sheetName)
@@ -999,13 +1043,7 @@ Private Sub Access引用一覧描画(ByRef wsResult As Worksheet, _
     resultRow = resultRow + 1
 
     ' 確認ポイント取得
-    confirmMemo = ""
-    For memoRow = 1 To wsConfig.Rows.Count
-        If InStr(wsConfig.Cells(memoRow, 1).Value, memoLabel) > 0 Then
-            confirmMemo = wsConfig.Cells(memoRow + 1, 1).Value
-            Exit For
-        End If
-    Next memoRow
+    confirmMemo = 設定メモ取得(wsConfig, memoLabel)
 
     ' 確認ポイント描画（改行ごとに1行ずつ展開）
     If confirmMemo <> "" Then
