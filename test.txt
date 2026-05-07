@@ -1,5 +1,5 @@
 ' ============================================================
-' 職員情報データ取込・チェック自動化 VBAコード【完全版】
+' ２職員情報データ取込・チェック自動化 VBAコード【NG明細展開版】
 ' ============================================================
 ' 貼り付け手順：
 ' 1. Alt+F11 でVBAエディタを開く
@@ -237,7 +237,7 @@ Sub チェック実行()
     Dim configLastRow   As Long
     configLastRow = wsConfig.Cells(wsConfig.Rows.Count, 1).End(xlUp).Row
 
-    ' 変数宣言（すべてここにまとめる）
+    ' 変数宣言
     Dim resultRow       As Long
     Dim totalNG         As Long
     Dim totalCheck      As Long
@@ -258,9 +258,6 @@ Sub チェック実行()
     Dim lastColTarget   As Long
     Dim totalRows       As Long
     Dim ngCount         As Long
-    Dim ngDetails       As String
-    Dim judgment        As String
-    Dim detail          As String
     Dim cellVal         As String
     Dim numVal          As Double
     Dim outOfRange      As Boolean
@@ -268,6 +265,8 @@ Sub チェック実行()
     Dim lenNG           As Boolean
     Dim dupDict         As Object
     Dim key             As Variant
+    Dim ngValues        As Object   ' NG値を格納するコレクション
+    Dim ngVal           As Variant
 
     resultRow  = 5
     totalNG    = 0
@@ -322,7 +321,9 @@ Sub チェック実行()
 
         totalRows = dataLastRow - dataStartRow + 1
         ngCount   = 0
-        ngDetails = ""
+
+        ' NG値を格納するコレクション（行番号:値 の形式で格納）
+        Set ngValues = CreateObject("System.Collections.ArrayList")
 
         ' ============================================================
         ' チェック実行
@@ -336,12 +337,9 @@ Sub チェック実行()
                 For k = dataStartRow To dataLastRow
                     If wsTarget.Cells(k, targetCol).Value = "" Then
                         ngCount = ngCount + 1
-                        If ngCount <= 3 Then
-                            ngDetails = ngDetails & "行" & k & " "
-                        End If
+                        ngValues.Add "行" & k & "：(空白)"
                     End If
                 Next k
-                If ngCount > 3 Then ngDetails = ngDetails & "他" & (ngCount - 3) & "件"
 
             ' ----------------------------------------------------------
             ' 重複チェック
@@ -361,12 +359,9 @@ Sub チェック実行()
                 For Each key In dupDict.Keys
                     If dupDict(key) > 1 Then
                         ngCount = ngCount + 1
-                        If ngCount <= 3 Then
-                            ngDetails = ngDetails & """" & key & """(" & dupDict(key) & "件) "
-                        End If
+                        ngValues.Add """" & key & """ (" & dupDict(key) & "件重複)"
                     End If
                 Next key
-                If ngCount > 3 Then ngDetails = ngDetails & "他" & (ngCount - 3) & "件"
 
             ' ----------------------------------------------------------
             ' 範囲チェック（数値）
@@ -381,36 +376,25 @@ Sub チェック実行()
                         If cond2 <> "" And numVal > CDbl(cond2) Then outOfRange = True
                         If outOfRange Then
                             ngCount = ngCount + 1
-                            If ngCount <= 3 Then
-                                ngDetails = ngDetails & "行" & k & "(" & numVal & ") "
-                            End If
+                            ngValues.Add "行" & k & "：" & numVal
                         End If
                     End If
                 Next k
-                If ngCount > 3 Then ngDetails = ngDetails & "他" & (ngCount - 3) & "件"
 
             ' ----------------------------------------------------------
-            ' ワードチェック（指定ワードを含む行をNG）
-            ' 条件①：チェックするワード
-            ' 拡張：チェック設定シートに行を追加するだけで複数ワード対応
+            ' ワードチェック
             ' ----------------------------------------------------------
             Case "ワードチェック"
                 If cond1 = "" Then GoTo NextConfig
                 For k = dataStartRow To dataLastRow
                     If InStr(CStr(wsTarget.Cells(k, targetCol).Value), cond1) > 0 Then
                         ngCount = ngCount + 1
-                        If ngCount <= 3 Then
-                            ngDetails = ngDetails & "行" & k & _
-                                        "(" & wsTarget.Cells(k, targetCol).Value & ") "
-                        End If
+                        ngValues.Add "行" & k & "：" & wsTarget.Cells(k, targetCol).Value
                     End If
                 Next k
-                If ngCount > 3 Then ngDetails = ngDetails & "他" & (ngCount - 3) & "件"
 
             ' ----------------------------------------------------------
             ' 文字数チェック
-            ' 条件①：最小文字数（空白なら下限なし）
-            ' 条件②：最大文字数（空白なら上限なし）
             ' ----------------------------------------------------------
             Case "文字数チェック"
                 If cond1 = "" And cond2 = "" Then GoTo NextConfig
@@ -421,73 +405,92 @@ Sub チェック実行()
                     If cond2 <> "" And strLen > CLng(cond2) Then lenNG = True
                     If lenNG Then
                         ngCount = ngCount + 1
-                        If ngCount <= 3 Then
-                            ngDetails = ngDetails & "行" & k & "(" & strLen & "文字) "
-                        End If
+                        ngValues.Add "行" & k & "：" & wsTarget.Cells(k, targetCol).Value & _
+                                     " (" & strLen & "文字)"
                     End If
                 Next k
-                If ngCount > 3 Then ngDetails = ngDetails & "他" & (ngCount - 3) & "件"
 
         End Select
 
-        ' 判定
+        ' NGのみ出力（OKはスキップ）
+        If ngCount = 0 Then GoTo NextConfig
+
         totalCheck = totalCheck + 1
-        If ngCount > 0 Then totalNG = totalNG + 1
-        judgment = IIf(ngCount = 0, "✅OK", "❌NG")
-        detail   = IIf(ngCount = 0, "問題なし", ngDetails)
+        totalNG    = totalNG + 1
 
-        ' 結果を書き込む
-        With wsResult
-            .Cells(resultRow, 1).Value  = totalCheck
-            .Cells(resultRow, 2).Value  = dataKind
-            .Cells(resultRow, 3).Value  = colName
-            .Cells(resultRow, 4).Value  = checkType
-            .Cells(resultRow, 5).Value  = totalRows & "件"
-            .Cells(resultRow, 6).Value  = ngCount
-            .Cells(resultRow, 7).Value  = judgment
-            .Cells(resultRow, 8).Value  = detail
-            .Cells(resultRow, 9).Value  = ""
-            .Cells(resultRow, 10).Value = "□"
+        ' NG明細行を1行ずつ出力
+        Dim isFirst As Boolean
+        isFirst = True
 
-            ' 行全体の書式
-            For col = 1 To 10
-                With .Cells(resultRow, col)
-                    .Font.Name = "Arial"
-                    .Font.Size = 10
-                    .VerticalAlignment   = xlVAlignCenter
-                    If col = 1 Or col = 6 Or col = 7 Or col = 10 Then
-                        .HorizontalAlignment = xlHAlignCenter
-                    End If
-                    If ngCount > 0 Then
-                        .Interior.Color = RGB(255, 199, 206)
-                    ElseIf resultRow Mod 2 = 0 Then
-                        .Interior.Color = RGB(245, 245, 245)
-                    Else
-                        .Interior.Color = RGB(255, 255, 255)
-                    End If
+        For Each ngVal In ngValues
+
+            ' 1行書き込む
+            With wsResult
+
+                If isFirst Then
+                    ' 1行目：チェック情報＋最初のNG値
+                    .Cells(resultRow, 1).Value  = totalCheck
+                    .Cells(resultRow, 2).Value  = dataKind
+                    .Cells(resultRow, 3).Value  = colName
+                    .Cells(resultRow, 4).Value  = checkType
+                    .Cells(resultRow, 5).Value  = totalRows & "件"
+                    .Cells(resultRow, 6).Value  = ngCount
+                    .Cells(resultRow, 7).Value  = "❌NG"
+                    isFirst = False
+                Else
+                    ' 2行目以降：NG値のみ（他の列は空白）
+                    .Cells(resultRow, 1).Value  = ""
+                    .Cells(resultRow, 2).Value  = ""
+                    .Cells(resultRow, 3).Value  = ""
+                    .Cells(resultRow, 4).Value  = ""
+                    .Cells(resultRow, 5).Value  = ""
+                    .Cells(resultRow, 6).Value  = ""
+                    .Cells(resultRow, 7).Value  = ""
+                End If
+
+                ' NG値・確認者・済は全行共通
+                .Cells(resultRow, 8).Value  = CStr(ngVal)
+                .Cells(resultRow, 9).Value  = ""
+                .Cells(resultRow, 10).Value = "□"
+
+                ' 行全体の書式
+                For col = 1 To 10
+                    With .Cells(resultRow, col)
+                        .Font.Name           = "Arial"
+                        .Font.Size           = 10
+                        .VerticalAlignment   = xlVAlignCenter
+                        .Interior.Color      = RGB(255, 199, 206)
+                        If col = 1 Or col = 6 Or col = 7 Or col = 10 Then
+                            .HorizontalAlignment = xlHAlignCenter
+                        End If
+                    End With
+                Next col
+
+                ' 判定セルの色（1行目のみ）
+                .Cells(resultRow, 7).Font.Color    = RGB(192, 0, 0)
+                .Cells(resultRow, 7).Font.Bold     = True
+                .Cells(resultRow, 7).Interior.Color = RGB(255, 199, 206)
+
+                ' 枠線
+                With .Range(.Cells(resultRow, 1), .Cells(resultRow, 10)).Borders
+                    .LineStyle = xlContinuous
+                    .Color     = RGB(191, 191, 191)
+                    .Weight    = xlThin
                 End With
-            Next col
 
-            ' 判定セルの色
-            If ngCount = 0 Then
-                .Cells(resultRow, 7).Font.Color     = RGB(55, 86, 35)
-                .Cells(resultRow, 7).Font.Bold       = True
-                .Cells(resultRow, 7).Interior.Color  = RGB(198, 239, 206)
-            Else
-                .Cells(resultRow, 7).Font.Color     = RGB(192, 0, 0)
-                .Cells(resultRow, 7).Font.Bold       = True
-                .Cells(resultRow, 7).Interior.Color  = RGB(255, 199, 206)
-            End If
-
-            ' 枠線
-            With .Range(.Cells(resultRow, 1), .Cells(resultRow, 10)).Borders
-                .LineStyle = xlContinuous
-                .Color     = RGB(191, 191, 191)
-                .Weight    = xlThin
             End With
-        End With
 
-        resultRow = resultRow + 1
+            resultRow = resultRow + 1
+
+        Next ngVal
+
+        ' NG明細の間に区切り線（空白行の代わりに下線を太くする）
+        With wsResult.Range(wsResult.Cells(resultRow - 1, 1), _
+                            wsResult.Cells(resultRow - 1, 10)).Borders(xlEdgeBottom)
+            .LineStyle = xlContinuous
+            .Color     = RGB(192, 0, 0)
+            .Weight    = xlMedium
+        End With
 
 NextConfig:
     Next i
@@ -518,8 +521,7 @@ NextConfig:
     wsResult.Range("A1").Select
 
     If totalNG = 0 Then
-        MsgBox "チェック完了！" & vbCrLf & "NGはありませんでした。" & vbCrLf & vbCrLf & _
-               "各行の右端「済」にチェックを入れて完了してください。", _
+        MsgBox "チェック完了！" & vbCrLf & "NGはありませんでした。", _
                vbInformation, "チェック完了"
     Else
         MsgBox "チェック完了！" & vbCrLf & "NG：" & totalNG & "件あります。" & vbCrLf & vbCrLf & _
