@@ -10,3 +10,23 @@ Case "ワードチェック"
         End If
     Next k
     If ngCount > 3 Then ngDetails = ngDetails & "他" & (ngCount - 3) & "件"
+
+
+
+Case "文字数チェック"
+    For k = dataStartRow To dataLastRow
+        Dim strLen As Long
+        strLen = Len(CStr(wsTarget.Cells(k, targetCol).Value))
+        Dim lenNG As Boolean
+        lenNG = False
+        If cond1 <> "" And strLen < CLng(cond1) Then lenNG = True
+        If cond2 <> "" And strLen > CLng(cond2) Then lenNG = True
+        If lenNG Then
+            ngCount = ngCount + 1
+            If ngCount <= 3 Then
+                ngDetails = ngDetails & "行" & k & _
+                "(" & strLen & "文字) "
+            End If
+        End If
+    Next k
+    If ngCount > 3 Then ngDetails = ngDetails & "他" & (ngCount - 3) & "件"
