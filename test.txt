@@ -1,7 +1,7 @@
-Set copyRange = srcWs.Range(srcWs.Cells(2, 1), srcWs.Cells(lastRow, lastCol))
-
-' 貼り付け先の書式を先に標準に設定
-destWs.Cells(3, 1).Resize(copyRange.Rows.Count, copyRange.Columns.Count).NumberFormat = "General"
-
 ' 値のみ貼り付け
 destWs.Cells(3, 1).Resize(copyRange.Rows.Count, copyRange.Columns.Count).Value = copyRange.Value
+
+' 貼り付け後に全列の書式を標準に強制リセット
+Dim resetRange As Range
+Set resetRange = destWs.Cells(3, 1).Resize(copyRange.Rows.Count, copyRange.Columns.Count)
+resetRange.NumberFormat = "General"
