@@ -83,15 +83,14 @@ End Sub
 Function SplitCSV(s As String) As String()
     Dim result() As String
     ReDim result(0)
-    Dim idx   As Integer: idx   = 0
-    Dim inQ   As Boolean: inQ   = False
-    Dim cur   As String:  cur   = ""
-    Dim pos   As Long
+    Dim idx  As Integer: idx  = 0
+    Dim inQ  As Boolean: inQ  = False
+    Dim cur  As String:  cur  = ""
+    Dim pos  As Long
     For pos = 1 To Len(s)
         Dim c As String: c = Mid(s, pos, 1)
         If c = Chr(34) Then
             If inQ And Mid(s, pos + 1, 1) = Chr(34) Then
-                ' エスケープされたダブルクォート
                 cur = cur & Chr(34)
                 pos = pos + 1
             Else
@@ -292,7 +291,7 @@ Sub BuildHistorySheet(dtS As Date, dtE As Date)
     Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
     If colD = 0 Then Exit Sub
 
-    Dim dc        As Object:     Set dc        = CreateObject("Scripting.Dictionary")
+    Dim dc        As Object: Set dc        = CreateObject("Scripting.Dictionary")
     Dim dateOrder As New Collection
     Dim r As Long
     For r = 2 To lastRow
@@ -350,8 +349,7 @@ Sub BuildCatDetailSheet(dtS As Date, dtE As Date)
     Dim colT As Long: colT = ColIdx(dws, "業務チーム")
     If colD = 0 Or colC = 0 Or colT = 0 Then Exit Sub
 
-    ' 操作パネルB20以降から並び順を読み込む
-    ' B列=番号, C列=業務チーム, D列=業務分類詳細
+    ' 操作パネルB20以降: B列=番号, C列=業務チーム, D列=業務分類詳細
     Dim sortOrder As New Collection
     Dim sortSet   As Object: Set sortSet = CreateObject("Scripting.Dictionary")
     Dim pr As Long: pr = 20
@@ -393,27 +391,22 @@ Sub BuildCatDetailSheet(dtS As Date, dtE As Date)
         Dim rowKey  As String: rowKey  = team & ChrW(9) & big & ChrW(9) & small
         Dim fullKey As String: fullKey = rowKey & ChrW(9) & lbl
 
-        If Not rowSet.Exists(rowKey)  Then rowSet.Add rowKey, True:  rowOrder.Add rowKey
-        If Not dateSet.Exists(lbl)    Then dateSet.Add lbl, True:    dateOrder.Add lbl
+        If Not rowSet.Exists(rowKey) Then rowSet.Add rowKey, True: rowOrder.Add rowKey
+        If Not dateSet.Exists(lbl)   Then dateSet.Add lbl, True:   dateOrder.Add lbl
         counts(fullKey) = IIf(counts.Exists(fullKey), counts(fullKey) + 1, 1)
 Skip2:
     Next r
 
-    ' 並び順構築
-    ' ① 操作パネル指定順を先に
-    ' ② データにあるが未指定のものを末尾に追加
-    ' ③ 操作パネル指定だがデータにないものも0件で表示
+    ' 並び順構築（指定順→未指定は末尾、指定のみ0件も表示）
     Dim sortedOrder As New Collection
     Dim addedSet    As Object: Set addedSet = CreateObject("Scripting.Dictionary")
 
     Dim so As Variant
     For Each so In sortOrder
-        ' データにあってもなくても操作パネル指定は必ず表示（0件表示のため）
         If Not addedSet.Exists(so) Then
             sortedOrder.Add so: addedSet.Add so, True
         End If
     Next so
-    ' データにあるが未指定のものを末尾に追加
     Dim rk As Variant
     For Each rk In rowOrder
         If Not addedSet.Exists(rk) Then
@@ -521,7 +514,7 @@ End Sub
 
 ' ════════════════════════════════════════════
 ' ⑤ カテゴリー別（週比較）
-'    並び順: 操作パネル E20以降のE列に大分類名を直接入力
+'    E列=表示名称, D列=業務分類詳細（集計キー）
 '    0件も表示
 ' ════════════════════════════════════════════
 Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
@@ -541,19 +534,27 @@ Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
     Dim thisSunday As Date: thisSunday = thisMonday + 6
     Dim lastSunday As Date: lastSunday = lastMonday + 6
 
-    ' 操作パネルE20以降から大分類名を直接読み込む
+    ' E列=表示名称, D列=業務分類詳細（大分類→表示名称のマップを作成）
+    Dim labelMap  As Object: Set labelMap  = CreateObject("Scripting.Dictionary")
     Dim sortOrder As New Collection
-    Dim sortSet   As Object: Set sortSet = CreateObject("Scripting.Dictionary")
+    Dim sortSet   As Object: Set sortSet   = CreateObject("Scripting.Dictionary")
     Dim pr As Long: pr = 20
     Do While Trim(CStr(pws.Cells(pr, 5).Value)) <> ""
-        Dim sv As String: sv = Trim(CStr(pws.Cells(pr, 5).Value))
-        If sv <> "" And Not sortSet.Exists(sv) Then
-            sortOrder.Add sv: sortSet.Add sv, True
+        Dim sLabel As String: sLabel = Trim(CStr(pws.Cells(pr, 5).Value))
+        Dim sCat   As String: sCat   = Trim(CStr(pws.Cells(pr, 4).Value))
+        If sLabel <> "" And sCat <> "" Then
+            Dim sbig As String, ssmall As String
+            GetBigSmall sCat, sbig, ssmall
+            ' 大分類名 → 表示名称 のマップ
+            If Not labelMap.Exists(sbig) Then labelMap.Add sbig, sLabel
+            If Not sortSet.Exists(sLabel) Then
+                sortOrder.Add sLabel: sortSet.Add sLabel, True
+            End If
         End If
         pr = pr + 1
     Loop
 
-    ' データ集計
+    ' データ集計（大分類を表示名称に変換してカウント）
     Dim thisCnt  As Object: Set thisCnt  = CreateObject("Scripting.Dictionary")
     Dim lastCnt  As Object: Set lastCnt  = CreateObject("Scripting.Dictionary")
     Dim bigOrder As New Collection
@@ -567,19 +568,20 @@ Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
         If cv = "" Or cv = "Empty" Then GoTo Skip5
         Dim big As String, small As String
         GetBigSmall cv, big, small
-        If Not bigSet.Exists(big) Then bigSet.Add big, True: bigOrder.Add big
+        ' E列で対応する表示名称があればそちらを使う、なければ大分類名をそのまま使う
+        Dim dispName As String
+        dispName = IIf(labelMap.Exists(big), labelMap(big), big)
+        If Not bigSet.Exists(dispName) Then bigSet.Add dispName, True: bigOrder.Add dispName
         If d >= thisMonday And d <= thisSunday Then
-            thisCnt(big) = IIf(thisCnt.Exists(big), thisCnt(big) + 1, 1)
+            thisCnt(dispName) = IIf(thisCnt.Exists(dispName), thisCnt(dispName) + 1, 1)
         End If
         If d >= lastMonday And d <= lastSunday Then
-            lastCnt(big) = IIf(lastCnt.Exists(big), lastCnt(big) + 1, 1)
+            lastCnt(dispName) = IIf(lastCnt.Exists(dispName), lastCnt(dispName) + 1, 1)
         End If
 Skip5:
     Next r
 
-    ' 並び順構築
-    ' ① E列指定順（0件でも表示）
-    ' ② データにあるが未指定のものを末尾に追加
+    ' 並び順構築（E列指定順→未指定は末尾、0件も表示）
     Dim sortedBig As New Collection
     Dim addedSet  As Object: Set addedSet = CreateObject("Scripting.Dictionary")
 
@@ -603,7 +605,7 @@ Skip5:
     thisLbl = "今週（" & Month(thisMonday) & "/" & Day(thisMonday) & "～" & Month(thisSunday) & "/" & Day(thisSunday) & "）"
     lastLbl = "先週（" & Month(lastMonday) & "/" & Day(lastMonday) & "～" & Month(lastSunday) & "/" & Day(lastSunday) & "）"
 
-    ws.Cells(2, 1).Value = "大分類"
+    ws.Cells(2, 1).Value = "分類"
     ws.Cells(2, 2).Value = thisLbl
     ws.Cells(2, 3).Value = lastLbl
     ws.Cells(2, 4).Value = "差分"
