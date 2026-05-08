@@ -1,20 +1,7 @@
-Case "文字数範囲チェック"
-    If cond1 = "" And cond2 = "" Then Exit Sub
-    For k = dataStartRow To dataLastRow
-        strLen = Len(CStr(wsTarget.Cells(k, targetCol).Value))
-        ' 条件①以上かつ条件②以下の場合にNG（範囲内がNG）
-        If strLen >= CLng(cond1) And strLen <= CLng(cond2) Then
-            ngCount = ngCount + 1
-            If withABC Then
-                ngValues.Add Array(wsTarget.Cells(k, 1).Value, _
-                                  wsTarget.Cells(k, 2).Value, _
-                                  wsTarget.Cells(k, 3).Value, _
-                                  CStr(wsTarget.Cells(k, targetCol).Value) & _
-                                  " (" & strLen & "文字)")
-            Else
-                ngValues.Add "行" & k & "：" & _
-                             CStr(wsTarget.Cells(k, targetCol).Value) & _
-                             " (" & strLen & "文字)"
-            End If
-        End If
-    Next k
+Set copyRange = srcWs.Range(srcWs.Cells(2, 1), srcWs.Cells(lastRow, lastCol))
+
+' 貼り付け先の書式を先に標準に設定
+destWs.Cells(3, 1).Resize(copyRange.Rows.Count, copyRange.Columns.Count).NumberFormat = "General"
+
+' 値のみ貼り付け
+destWs.Cells(3, 1).Resize(copyRange.Rows.Count, copyRange.Columns.Count).Value = copyRange.Value
