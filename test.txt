@@ -270,13 +270,13 @@ End Function
 Function GetDateRange(ByRef dtStart As Date, ByRef dtEnd As Date) As Boolean
     Dim wsPanel As Worksheet
     Set wsPanel = ThisWorkbook.Sheets("操作パネル")
-    If Not IsDate(wsPanel.Cells(13, 3).Value) Or Not IsDate(wsPanel.Cells(14, 3).Value) Then
-        MsgBox "操作パネルのC13・C14に有効な日付を入力してください", vbExclamation
+    If Not IsDate(wsPanel.Cells(14, 3).Value) Or Not IsDate(wsPanel.Cells(15, 3).Value) Then
+        MsgBox "操作パネルのC14・C15に有効な日付を入力してください", vbExclamation
         GetDateRange = False
         Exit Function
     End If
-    dtStart = CDate(wsPanel.Cells(13, 3).Value)
-    dtEnd   = CDate(wsPanel.Cells(14, 3).Value)
+    dtStart = CDate(wsPanel.Cells(14, 3).Value)
+    dtEnd   = CDate(wsPanel.Cells(15, 3).Value)
     If dtStart > dtEnd Then
         MsgBox "開始日が終了日より後です", vbExclamation
         GetDateRange = False
@@ -1633,8 +1633,8 @@ Private Sub 集計クリア_実行()
     sheetNames(4) = "傾向分析サマリー"
 
     Dim i As Long
+    Dim ws As Worksheet
     For i = 0 To 4
-        Dim ws As Worksheet
         Set ws = ThisWorkbook.Sheets(sheetNames(i))
         Select Case sheetNames(i)
             Case "回線占有状況"
