@@ -1,5 +1,5 @@
-２' ============================================================
-' 給与口座データ取込・チェック自動化 VBAコード【最新版】
+' ============================================================
+' 給与口座データ取込・チェック自動化 VBAコード【完全整理版】
 ' ============================================================
 ' 【シート構成】
 ' 　作業手順書
@@ -7,16 +7,25 @@
 ' 　Accessデータ2
 ' 　Accessデータ3
 ' 　Accessデータ4
-' 　SQLデータ
 ' 　チェック設定
 ' 　チェック結果
 '
 ' 【チェック設定シートに追加するラベル一覧】
-' 　【Accessデータ2I列確認手順】
-' 　【Accessデータ3確認手順】
-' 　【Accessデータ4目視確認ポイント】
-' 　【Accessデータ2目視確認ポイント】
-' 　【Accessデータ3目視確認ポイント】
+' 　【Accessデータ2I列確認手順】← Accessデータ2のI列NGの確認手順
+' 　【Accessデータ3確認手順】　 ← Accessデータ3のD列NGの確認手順
+' 　【Accessデータ2目視確認ポイント】← Accessデータ2引用一覧の確認ポイント
+' 　【Accessデータ4目視確認ポイント】← Accessデータ4引用一覧の確認ポイント
+'
+' 【チェック結果シートのセクション構成】
+' 　▼ Accessデータ1 NG一覧（チェック設定シートの条件に基づく）
+' 　▼ Accessデータ2 I列NG一覧（1以外NG）
+' 　▼ Accessデータ3 D列NG一覧（2以外NG）
+' 　▼ Accessデータ2 目視確認用引用一覧
+' 　▼ Accessデータ4 目視確認用引用一覧
+'
+' 【VBAで自動処理されるもの（チェック設定シートへの記載不要）】
+' 　Accessデータ2のI列チェック
+' 　Accessデータ3のD列チェック
 ' ============================================================
 
 ' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
@@ -33,7 +42,6 @@ Const SHEET_ACCESS1 As String = "Accessデータ1"
 Const SHEET_ACCESS2 As String = "Accessデータ2"
 Const SHEET_ACCESS3 As String = "Accessデータ3"
 Const SHEET_ACCESS4 As String = "Accessデータ4"
-Const SHEET_SQL     As String = "SQLデータ"
 Const SHEET_CONFIG  As String = "チェック設定"
 Const SHEET_RESULT  As String = "チェック結果"
 
@@ -45,14 +53,11 @@ Const ACCESS_FILE4  As String = "Access出力4.xlsx"
 
 ' 各引用一覧の列数（済チェック含まない）
 Const QUOTE_COL_ACCESS2 As Long = 8  ' A,B,C,E,F,G,H,J
-Const QUOTE_COL_ACCESS3 As Long = 4  ' A,B,C,D
 Const QUOTE_COL_ACCESS4 As Long = 4  ' A,B,C,D
 
 ' チェック結果各セクションの列数（済チェック含む）
 Const COL_NG1  As Long = 12  ' Accessデータ1・2I列・3D列NG一覧
-Const COL_NG2  As Long = 10  ' Accessデータ2・SQL NG一覧
 Const COL_REF2 As Long = 9   ' Accessデータ2引用一覧（8列+済）
-Const COL_REF3 As Long = 5   ' Accessデータ3引用一覧（4列+済）
 Const COL_REF4 As Long = 5   ' Accessデータ4引用一覧（4列+済）
 
 ' 色定数
@@ -87,7 +92,6 @@ Sub リセット()
     Dim ws2      As Worksheet
     Dim ws3      As Worksheet
     Dim ws4      As Worksheet
-    Dim ws5      As Worksheet
     Dim ws8      As Worksheet
     Dim wsM      As Worksheet
     Dim i        As Integer
@@ -97,7 +101,6 @@ Sub リセット()
     Set ws2 = ThisWorkbook.Sheets(SHEET_ACCESS2)
     Set ws3 = ThisWorkbook.Sheets(SHEET_ACCESS3)
     Set ws4 = ThisWorkbook.Sheets(SHEET_ACCESS4)
-    Set ws5 = ThisWorkbook.Sheets(SHEET_SQL)
     Set ws8 = ThisWorkbook.Sheets(SHEET_RESULT)
     Set wsM = ThisWorkbook.Sheets(SHEET_MANUAL)
 
@@ -106,10 +109,7 @@ Sub リセット()
     Call シートクリア(ws3, 2)
     Call シートクリア(ws4, 2)
 
-    If ws5.Cells(ws5.Rows.Count, 1).End(xlUp).Row >= 3 Then
-        ws5.Range("A3:" & ws5.Cells(ws5.Rows.Count, 1).End(xlUp).Address).ClearContents
-    End If
-
+    ' チェック結果クリア
     With ws8
         If .Cells.Find("*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious) Is Nothing Then
             lastRow8 = 4
@@ -254,18 +254,7 @@ Private Sub Accessデータ読込(ByVal fileNo As Integer)
 End Sub
 
 ' ============================================================
-' STEP3：SQLシートへジャンプ
-' ============================================================
-Sub SQLシートへジャンプ()
-    ThisWorkbook.Sheets(SHEET_SQL).Activate
-    ThisWorkbook.Sheets(SHEET_SQL).Range("A3").Select
-    MsgBox "SSMSでクエリを実行し、結果をコピーしてA3セルに貼り付けてください。" & vbCrLf & _
-           "貼り付け完了後、作業手順書シートに戻ってSTEP4を実行してください。", _
-           vbInformation, "SQLデータ貼付け"
-End Sub
-
-' ============================================================
-' STEP4：チェック実行メイン
+' STEP3：チェック実行メイン
 ' ============================================================
 Sub チェック実行()
 
@@ -302,33 +291,30 @@ Sub チェック実行()
     configLastRow = wsConfig.Cells(wsConfig.Rows.Count, 1).End(xlUp).Row
 
     ' 変数宣言
-    Dim resultRow1      As Long
-    Dim resultRow2      As Long
-    Dim resultRow2I     As Long
-    Dim resultRow3D     As Long
-    Dim totalNG         As Long
-    Dim totalCheck      As Long
-    Dim totalCheck2     As Long
-    Dim i               As Long
-    Dim dataKind        As String
-    Dim colName         As String
-    Dim checkType       As String
-    Dim cond1           As String
-    Dim cond2           As String
-    Dim confirmNote     As String
-    Dim targetSheetName As String
-    Dim targetCol       As Long
-    Dim headerRow       As Long
-    Dim dataStartRow    As Long
-    Dim dataLastRow     As Long
-    Dim lastColTarget   As Long
-    Dim totalRows       As Long
-    Dim ngCount         As Long
-    Dim ngValues        As Object
+    Dim resultRow1    As Long
+    Dim resultRow2I   As Long
+    Dim resultRow3D   As Long
+    Dim resultRow2    As Long
+    Dim totalNG       As Long
+    Dim totalCheck    As Long
+    Dim i             As Long
+    Dim dataKind      As String
+    Dim colName       As String
+    Dim checkType     As String
+    Dim cond1         As String
+    Dim cond2         As String
+    Dim confirmNote   As String
+    Dim targetCol     As Long
+    Dim headerRow     As Long
+    Dim dataStartRow  As Long
+    Dim dataLastRow   As Long
+    Dim lastColTarget As Long
+    Dim totalRows     As Long
+    Dim ngCount       As Long
+    Dim ngValues      As Object
 
-    totalNG     = 0
-    totalCheck  = 0
-    totalCheck2 = 0
+    totalNG    = 0
+    totalCheck = 0
 
     ' ============================================================
     ' ▼ Accessデータ1 NG一覧セクション
@@ -358,7 +344,7 @@ Sub チェック実行()
     Call ヘッダー行描画(wsResult, sec1Row + 1, sec1Headers, COL_NG1 - 1, RGB(31, 78, 121))
     resultRow1 = sec1Row + 2
 
-    ' チェック設定ループ（Accessデータ1）
+    ' チェック設定ループ（Accessデータ1のみ）
     For i = 4 To configLastRow
         dataKind    = wsConfig.Cells(i, 1).Value
         colName     = wsConfig.Cells(i, 2).Value
@@ -456,79 +442,10 @@ NextConfig1:
     Call Access3D列チェック(wsResult, resultRow3D, totalNG, totalCheck, wsConfig)
 
     ' ============================================================
-    ' ▼ Accessデータ2・SQL NG一覧セクション
+    ' ▼ Accessデータ2 目視確認用引用一覧
     ' ============================================================
-    wsResult.Rows(resultRow3D).RowHeight = 8
+    resultRow2 = resultRow3D
 
-    Dim sec2Row As Long
-    sec2Row = resultRow3D + 1
-
-    Call セクションタイトル描画(wsResult, sec2Row, _
-                                "▼ Accessデータ2・SQL NG一覧", 11, RGB(31, 78, 121), COL_NG2)
-
-    Dim sec2Headers(9) As String
-    sec2Headers(0) = "#"
-    sec2Headers(1) = "データ種別"
-    sec2Headers(2) = "列名"
-    sec2Headers(3) = "チェック種別"
-    sec2Headers(4) = "件数"
-    sec2Headers(5) = "NG数"
-    sec2Headers(6) = "判定"
-    sec2Headers(7) = "NG値"
-    sec2Headers(8) = "確認手順"
-    sec2Headers(9) = "済"
-
-    Call ヘッダー行描画(wsResult, sec2Row + 1, sec2Headers, COL_NG2 - 1, RGB(31, 78, 121))
-    resultRow2 = sec2Row + 2
-
-    ' チェック設定ループ（Accessデータ2・SQL）
-    For i = 4 To configLastRow
-        dataKind    = wsConfig.Cells(i, 1).Value
-        colName     = wsConfig.Cells(i, 2).Value
-        checkType   = wsConfig.Cells(i, 3).Value
-        cond1       = wsConfig.Cells(i, 4).Value
-        cond2       = wsConfig.Cells(i, 5).Value
-        confirmNote = wsConfig.Cells(i, 8).Value
-
-        If dataKind = "" Or colName = "" Then GoTo NextConfig2
-        If dataKind = "Accessデータ1" Then GoTo NextConfig2
-        If dataKind = "Accessデータ3" Then GoTo NextConfig2
-        If dataKind = "Accessデータ4" Then GoTo NextConfig2
-
-        Select Case dataKind
-            Case "Accessデータ2": targetSheetName = SHEET_ACCESS2
-            Case "SQLデータ":     targetSheetName = SHEET_SQL
-            Case Else:             GoTo NextConfig2
-        End Select
-
-        Set wsTarget = ThisWorkbook.Sheets(targetSheetName)
-        headerRow    = IIf(targetSheetName = SHEET_SQL, 3, 2)
-
-        Call チェック前処理(wsTarget, headerRow, colName, targetCol, _
-                            dataStartRow, dataLastRow, lastColTarget)
-        If targetCol = 0 Then GoTo NextConfig2
-        If dataLastRow < dataStartRow Then GoTo NextConfig2
-
-        totalRows = dataLastRow - dataStartRow + 1
-        ngCount   = 0
-        Set ngValues = CreateObject("System.Collections.ArrayList")
-
-        Call チェック実行処理(wsTarget, checkType, targetCol, dataStartRow, dataLastRow, _
-                              cond1, cond2, ngCount, ngValues, False)
-
-        totalCheck2 = totalCheck2 + 1
-        If ngCount = 0 Then GoTo NextConfig2
-        totalNG = totalNG + 1
-
-        Call NG行出力_型2(wsResult, resultRow2, totalCheck2, dataKind, colName, checkType, _
-                          totalRows, ngCount, confirmNote, ngValues, COL_NG2)
-
-NextConfig2:
-    Next i
-
-    ' ============================================================
-    ' ▼ Accessデータ2 引用一覧
-    ' ============================================================
     Call Access引用一覧描画(wsResult, resultRow2, wsConfig, _
                             SHEET_ACCESS2, _
                             "▼ Accessデータ2 目視確認用引用一覧", _
@@ -537,17 +454,7 @@ NextConfig2:
                             QUOTE_COL_ACCESS2, COL_REF2)
 
     ' ============================================================
-    ' ▼ Accessデータ3 引用一覧
-    ' ============================================================
-    Call Access引用一覧描画(wsResult, resultRow2, wsConfig, _
-                            SHEET_ACCESS3, _
-                            "▼ Accessデータ3 目視確認用引用一覧", _
-                            "Accessデータ3目視確認ポイント", _
-                            Array(1, 2, 3, 4), _
-                            QUOTE_COL_ACCESS3, COL_REF3)
-
-    ' ============================================================
-    ' ▼ Accessデータ4 引用一覧
+    ' ▼ Accessデータ4 目視確認用引用一覧
     ' ============================================================
     Call Access引用一覧描画(wsResult, resultRow2, wsConfig, _
                             SHEET_ACCESS4, _
@@ -559,7 +466,7 @@ NextConfig2:
     ' ============================================================
     ' サマリー更新
     ' ============================================================
-    wsResult.Range("C3").Value = (totalCheck + totalCheck2) & "件"
+    wsResult.Range("C3").Value = totalCheck & "件"
     wsResult.Range("G3").Value = totalNG & "件"
 
     If totalNG = 0 Then
@@ -913,7 +820,7 @@ Private Sub Access3D列チェック(ByRef wsResult As Worksheet, _
     Set ngValues = CreateObject("System.Collections.ArrayList")
 
     For k = dataStartRow To dataLastRow
-        dVal = wsAccess3.Cells(k, 4).Value  ' D列（4列目）
+        dVal = wsAccess3.Cells(k, 4).Value
         isNG = False
         If dVal = "" Then
             isNG = True
@@ -1043,60 +950,6 @@ Private Sub NG行出力_型1(ByRef wsResult As Worksheet, _
 End Sub
 
 ' ============================================================
-' NG行出力（型2）
-' ============================================================
-Private Sub NG行出力_型2(ByRef wsResult As Worksheet, _
-                          ByRef resultRow As Long, _
-                          ByVal checkNo As Long, _
-                          ByVal dataKind As String, _
-                          ByVal colName As String, _
-                          ByVal checkType As String, _
-                          ByVal totalRows As Long, _
-                          ByVal ngCount As Long, _
-                          ByVal confirmNote As String, _
-                          ByRef ngValues As Object, _
-                          ByVal colCount As Long)
-    Dim ngVal   As Variant
-    Dim isFirst As Boolean
-    isFirst = True
-
-    For Each ngVal In ngValues
-        With wsResult
-            If isFirst Then
-                .Cells(resultRow, 1).Value = checkNo
-                .Cells(resultRow, 2).Value = dataKind
-                .Cells(resultRow, 3).Value = colName
-                .Cells(resultRow, 4).Value = checkType
-                .Cells(resultRow, 5).Value = totalRows & "件"
-                .Cells(resultRow, 6).Value = ngCount
-                .Cells(resultRow, 7).Value = "❌NG"
-                isFirst = False
-            Else
-                .Cells(resultRow, 1).Value = ""
-                .Cells(resultRow, 2).Value = ""
-                .Cells(resultRow, 3).Value = ""
-                .Cells(resultRow, 4).Value = ""
-                .Cells(resultRow, 5).Value = ""
-                .Cells(resultRow, 6).Value = ""
-                .Cells(resultRow, 7).Value = ""
-            End If
-
-            .Cells(resultRow, 8).Value  = CStr(ngVal)
-            .Cells(resultRow, 9).Value  = confirmNote
-            .Cells(resultRow, 10).Value = "□"
-
-            Call NG行書式設定(wsResult, resultRow, colCount, COLOR_WHITE)
-            .Cells(resultRow, 7).Font.Color = RGB(192, 0, 0)
-            .Cells(resultRow, 7).Font.Bold  = True
-            .Cells(resultRow, 9).WrapText   = True
-        End With
-        resultRow = resultRow + 1
-    Next ngVal
-
-    Call 区切り線描画(wsResult, resultRow - 1, colCount)
-End Sub
-
-' ============================================================
 ' 引用一覧描画（共通）
 ' ============================================================
 Private Sub Access引用一覧描画(ByRef wsResult As Worksheet, _
@@ -1167,7 +1020,7 @@ Private Sub Access引用一覧描画(ByRef wsResult As Worksheet, _
         Next memoLine
     End If
 
-    ' ヘッダー行
+    ' ヘッダー行（実際の列名を使用）
     Dim quoteHeaders() As String
     ReDim quoteHeaders(quoteColCount)
     For colIdx = 0 To quoteColCount - 1
