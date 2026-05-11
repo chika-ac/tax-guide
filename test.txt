@@ -1,5 +1,5 @@
-' ============================================================
-' 給与口座データ取込・チェック自動化 VBAコード【最終版】
+２' ============================================================
+' 給与口座データ取込・チェック自動化 VBAコード【最新版】
 ' ============================================================
 ' 【シート構成】
 ' 　作業手順書
@@ -11,47 +11,12 @@
 ' 　チェック設定
 ' 　チェック結果
 '
-' 【貼り付け手順】
-' ＜標準モジュール＞
-' 1. Alt+F11 でVBAエディタを開く
-' 2. 既存の標準モジュールのコードを全選択して削除
-' 3. このファイルの「標準モジュール」部分を貼り付け
-'
-' ＜シートモジュール＞
-' 4. 左ツリーの「Sheet（チェック結果）」をダブルクリック
-' 5. このファイルの末尾「シートモジュール」部分を貼り付け
-'    ※ コメントアウト（行頭の '）を外して貼り付けてください
-'
-' 6. Ctrl+S で保存
-' ============================================================
-'
-' ============================================================
-' チェック設定シートの設定方法
-' ============================================================
-' 【チェック設定表】（4行目以降）
-'   A列：データ種別（Accessデータ1／Accessデータ2／SQLデータ）
-'   B列：列名
-'   C列：チェック種別
-'   D列：条件①
-'   E列：条件②
-'   F列：重要度
-'   G列：備考
-'   H列：確認手順
-'
-' 【Accessデータ4確認手順】
-'   A列：【Accessデータ4確認手順】← このラベル
-'   次の行：確認内容（Alt+Enterで改行可）
-'
-' 【Accessデータ2目視確認ポイント】
-'   A列：【Accessデータ2目視確認ポイント】← このラベル
-'   次の行：確認内容（Alt+Enterで改行可）
-'
-' 【Accessデータ3目視確認ポイント】
-'   A列：【Accessデータ3目視確認ポイント】← このラベル
-'   次の行：確認内容（Alt+Enterで改行可）
-'
-' ※ Accessデータ2のI列チェック・Accessデータ4のD列チェックは
-'    VBAで自動処理されるためチェック設定表への記載は不要です
+' 【チェック設定シートに追加するラベル一覧】
+' 　【Accessデータ2I列確認手順】
+' 　【Accessデータ3確認手順】
+' 　【Accessデータ4目視確認ポイント】
+' 　【Accessデータ2目視確認ポイント】
+' 　【Accessデータ3目視確認ポイント】
 ' ============================================================
 
 ' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
@@ -81,12 +46,14 @@ Const ACCESS_FILE4  As String = "Access出力4.xlsx"
 ' 各引用一覧の列数（済チェック含まない）
 Const QUOTE_COL_ACCESS2 As Long = 8  ' A,B,C,E,F,G,H,J
 Const QUOTE_COL_ACCESS3 As Long = 4  ' A,B,C,D
+Const QUOTE_COL_ACCESS4 As Long = 4  ' A,B,C,D
 
 ' チェック結果各セクションの列数（済チェック含む）
-Const COL_NG1  As Long = 12  ' Accessデータ1・2I列・4NG一覧
+Const COL_NG1  As Long = 12  ' Accessデータ1・2I列・3D列NG一覧
 Const COL_NG2  As Long = 10  ' Accessデータ2・SQL NG一覧
 Const COL_REF2 As Long = 9   ' Accessデータ2引用一覧（8列+済）
 Const COL_REF3 As Long = 5   ' Accessデータ3引用一覧（4列+済）
+Const COL_REF4 As Long = 5   ' Accessデータ4引用一覧（4列+済）
 
 ' 色定数
 Const COLOR_BLUE  As Long = 13551615  ' RGB(189, 215, 238) 薄青
@@ -143,7 +110,6 @@ Sub リセット()
         ws5.Range("A3:" & ws5.Cells(ws5.Rows.Count, 1).End(xlUp).Address).ClearContents
     End If
 
-    ' チェック結果クリア（全体の最終行を確実に取得）
     With ws8
         If .Cells.Find("*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious) Is Nothing Then
             lastRow8 = 4
@@ -219,6 +185,7 @@ Private Sub Accessデータ読込(ByVal fileNo As Integer)
     Dim c            As Long
     Dim prevVal      As String
     Dim currentColor As Long
+    Dim rowVal       As String
 
     Select Case fileNo
         Case 1: fileName = ACCESS_FILE1: targetSheet = SHEET_ACCESS1
@@ -268,7 +235,6 @@ Private Sub Accessデータ読込(ByVal fileNo As Integer)
     currentColor = COLOR_WHITE
 
     For r = 3 To 2 + copyRange.Rows.Count
-        Dim rowVal As String
         rowVal       = CStr(destWs.Cells(r, 1).Value)
         currentColor = 申請番号色(rowVal, prevVal, currentColor)
         prevVal      = rowVal
@@ -338,8 +304,8 @@ Sub チェック実行()
     ' 変数宣言
     Dim resultRow1      As Long
     Dim resultRow2      As Long
-    Dim resultRow4      As Long
     Dim resultRow2I     As Long
+    Dim resultRow3D     As Long
     Dim totalNG         As Long
     Dim totalCheck      As Long
     Dim totalCheck2     As Long
@@ -430,42 +396,12 @@ NextConfig1:
     Next i
 
     ' ============================================================
-    ' ▼ Accessデータ4 NG一覧セクション
+    ' ▼ Accessデータ2 I列NG一覧セクション
     ' ============================================================
     wsResult.Rows(resultRow1).RowHeight = 8
 
-    Dim sec4Row As Long
-    sec4Row = resultRow1 + 1
-
-    Call セクションタイトル描画(wsResult, sec4Row, _
-                                "▼ Accessデータ4 NG一覧", 11, RGB(31, 78, 121), COL_NG1)
-
-    Dim sec4Headers(11) As String
-    sec4Headers(0)  = "#"
-    sec4Headers(1)  = "列名"
-    sec4Headers(2)  = "チェック種別"
-    sec4Headers(3)  = "件数"
-    sec4Headers(4)  = "NG数"
-    sec4Headers(5)  = "判定"
-    sec4Headers(6)  = "申請番号"
-    sec4Headers(7)  = "職員番号"
-    sec4Headers(8)  = "氏名"
-    sec4Headers(9)  = "NG値"
-    sec4Headers(10) = "確認手順"
-    sec4Headers(11) = "済"
-
-    Call ヘッダー行描画(wsResult, sec4Row + 1, sec4Headers, COL_NG1 - 1, RGB(31, 78, 121))
-    resultRow4 = sec4Row + 2
-
-    Call Access4チェック(wsResult, resultRow4, totalNG, totalCheck, wsConfig)
-
-    ' ============================================================
-    ' ▼ Accessデータ2 I列NG一覧セクション
-    ' ============================================================
-    wsResult.Rows(resultRow4).RowHeight = 8
-
     Dim sec2IRow As Long
-    sec2IRow = resultRow4 + 1
+    sec2IRow = resultRow1 + 1
 
     Call セクションタイトル描画(wsResult, sec2IRow, _
                                 "▼ Accessデータ2 I列NG一覧", 11, RGB(31, 78, 121), COL_NG1)
@@ -487,15 +423,45 @@ NextConfig1:
     Call ヘッダー行描画(wsResult, sec2IRow + 1, sec2IHeaders, COL_NG1 - 1, RGB(31, 78, 121))
     resultRow2I = sec2IRow + 2
 
-    Call Access2I列チェック(wsResult, resultRow2I, totalNG, totalCheck)
+    Call Access2I列チェック(wsResult, resultRow2I, totalNG, totalCheck, wsConfig)
+
+    ' ============================================================
+    ' ▼ Accessデータ3 D列NG一覧セクション
+    ' ============================================================
+    wsResult.Rows(resultRow2I).RowHeight = 8
+
+    Dim sec3DRow As Long
+    sec3DRow = resultRow2I + 1
+
+    Call セクションタイトル描画(wsResult, sec3DRow, _
+                                "▼ Accessデータ3 D列NG一覧", 11, RGB(31, 78, 121), COL_NG1)
+
+    Dim sec3DHeaders(11) As String
+    sec3DHeaders(0)  = "#"
+    sec3DHeaders(1)  = "列名"
+    sec3DHeaders(2)  = "チェック種別"
+    sec3DHeaders(3)  = "件数"
+    sec3DHeaders(4)  = "NG数"
+    sec3DHeaders(5)  = "判定"
+    sec3DHeaders(6)  = "申請番号"
+    sec3DHeaders(7)  = "職員番号"
+    sec3DHeaders(8)  = "氏名"
+    sec3DHeaders(9)  = "NG値"
+    sec3DHeaders(10) = "確認手順"
+    sec3DHeaders(11) = "済"
+
+    Call ヘッダー行描画(wsResult, sec3DRow + 1, sec3DHeaders, COL_NG1 - 1, RGB(31, 78, 121))
+    resultRow3D = sec3DRow + 2
+
+    Call Access3D列チェック(wsResult, resultRow3D, totalNG, totalCheck, wsConfig)
 
     ' ============================================================
     ' ▼ Accessデータ2・SQL NG一覧セクション
     ' ============================================================
-    wsResult.Rows(resultRow2I).RowHeight = 8
+    wsResult.Rows(resultRow3D).RowHeight = 8
 
     Dim sec2Row As Long
-    sec2Row = resultRow2I + 1
+    sec2Row = resultRow3D + 1
 
     Call セクションタイトル描画(wsResult, sec2Row, _
                                 "▼ Accessデータ2・SQL NG一覧", 11, RGB(31, 78, 121), COL_NG2)
@@ -526,6 +492,7 @@ NextConfig1:
 
         If dataKind = "" Or colName = "" Then GoTo NextConfig2
         If dataKind = "Accessデータ1" Then GoTo NextConfig2
+        If dataKind = "Accessデータ3" Then GoTo NextConfig2
         If dataKind = "Accessデータ4" Then GoTo NextConfig2
 
         Select Case dataKind
@@ -578,6 +545,16 @@ NextConfig2:
                             "Accessデータ3目視確認ポイント", _
                             Array(1, 2, 3, 4), _
                             QUOTE_COL_ACCESS3, COL_REF3)
+
+    ' ============================================================
+    ' ▼ Accessデータ4 引用一覧
+    ' ============================================================
+    Call Access引用一覧描画(wsResult, resultRow2, wsConfig, _
+                            SHEET_ACCESS4, _
+                            "▼ Accessデータ4 目視確認用引用一覧", _
+                            "Accessデータ4目視確認ポイント", _
+                            Array(1, 2, 3, 4), _
+                            QUOTE_COL_ACCESS4, COL_REF4)
 
     ' ============================================================
     ' サマリー更新
@@ -800,103 +777,14 @@ Private Function 設定メモ取得(ByVal wsConfig As Worksheet, _
 End Function
 
 ' ============================================================
-' Accessデータ4専用チェック（D列「無」ならNG）
-' ============================================================
-Private Sub Access4チェック(ByRef wsResult As Worksheet, _
-                             ByRef resultRow As Long, _
-                             ByRef totalNG As Long, _
-                             ByRef totalCheck As Long, _
-                             ByVal wsConfig As Worksheet)
-    Dim wsAccess4    As Worksheet
-    Dim dataStartRow As Long
-    Dim dataLastRow  As Long
-    Dim k            As Long
-    Dim ngCount      As Long
-    Dim ngValues     As Object
-    Dim ngVal        As Variant
-    Dim isFirst      As Boolean
-    Dim dVal         As String
-    Dim confirmNote  As String
-    Dim prevVal      As String
-    Dim currentColor As Long
-
-    confirmNote = 設定メモ取得(wsConfig, "Accessデータ4確認手順")
-
-    Set wsAccess4 = ThisWorkbook.Sheets(SHEET_ACCESS4)
-    dataStartRow  = 3
-    dataLastRow   = wsAccess4.Cells(wsAccess4.Rows.Count, 1).End(xlUp).Row
-
-    If dataLastRow < dataStartRow Then Exit Sub
-
-    ngCount = 0
-    Set ngValues = CreateObject("System.Collections.ArrayList")
-
-    For k = dataStartRow To dataLastRow
-        dVal = CStr(wsAccess4.Cells(k, 4).Value)
-        If dVal = "無" Then
-            ngCount = ngCount + 1
-            ngValues.Add Array(wsAccess4.Cells(k, 1).Value, _
-                               wsAccess4.Cells(k, 2).Value, _
-                               wsAccess4.Cells(k, 3).Value, _
-                               dVal)
-        End If
-    Next k
-
-    totalCheck = totalCheck + 1
-    If ngCount = 0 Then Exit Sub
-
-    totalNG  = totalNG + 1
-    isFirst  = True
-    prevVal  = ""
-    currentColor = COLOR_WHITE
-
-    For Each ngVal In ngValues
-        currentColor = 申請番号色(CStr(ngVal(0)), prevVal, currentColor)
-        prevVal = CStr(ngVal(0))
-
-        With wsResult
-            If isFirst Then
-                .Cells(resultRow, 1).Value  = totalCheck
-                .Cells(resultRow, 2).Value  = "D列"
-                .Cells(resultRow, 3).Value  = "ワードチェック(無)"
-                .Cells(resultRow, 4).Value  = (dataLastRow - dataStartRow + 1) & "件"
-                .Cells(resultRow, 5).Value  = ngCount
-                .Cells(resultRow, 6).Value  = "❌NG"
-                isFirst = False
-            Else
-                .Cells(resultRow, 1).Value  = ""
-                .Cells(resultRow, 2).Value  = ""
-                .Cells(resultRow, 3).Value  = ""
-                .Cells(resultRow, 4).Value  = ""
-                .Cells(resultRow, 5).Value  = ""
-                .Cells(resultRow, 6).Value  = ""
-            End If
-
-            .Cells(resultRow, 7).Value  = ngVal(0)
-            .Cells(resultRow, 8).Value  = ngVal(1)
-            .Cells(resultRow, 9).Value  = ngVal(2)
-            .Cells(resultRow, 10).Value = ngVal(3)
-            .Cells(resultRow, 11).Value = confirmNote
-            .Cells(resultRow, 12).Value = "□"
-
-            Call NG行書式設定(wsResult, resultRow, COL_NG1, currentColor)
-            .Cells(resultRow, 6).Font.Color = RGB(192, 0, 0)
-            .Cells(resultRow, 6).Font.Bold  = True
-            .Cells(resultRow, 11).WrapText  = True
-        End With
-        resultRow = resultRow + 1
-    Next ngVal
-
-    Call 区切り線描画(wsResult, resultRow - 1, COL_NG1)
-End Sub
-
-' ============================================================
 ' Accessデータ2専用チェック（I列「1以外」ならNG）
+' 確認手順：【Accessデータ2I列確認手順】から取得
 ' ============================================================
 Private Sub Access2I列チェック(ByRef wsResult As Worksheet, _
                                 ByRef resultRow As Long, _
                                 ByRef totalNG As Long, _
-                                ByRef totalCheck As Long)
+                                ByRef totalCheck As Long, _
+                                ByVal wsConfig As Worksheet)
     Dim wsAccess2    As Worksheet
     Dim dataStartRow As Long
     Dim dataLastRow  As Long
@@ -909,6 +797,9 @@ Private Sub Access2I列チェック(ByRef wsResult As Worksheet, _
     Dim isNG         As Boolean
     Dim prevVal      As String
     Dim currentColor As Long
+    Dim confirmNote  As String
+
+    confirmNote = 設定メモ取得(wsConfig, "Accessデータ2I列確認手順")
 
     Set wsAccess2 = ThisWorkbook.Sheets(SHEET_ACCESS2)
     dataStartRow  = 3
@@ -942,9 +833,9 @@ Private Sub Access2I列チェック(ByRef wsResult As Worksheet, _
     totalCheck = totalCheck + 1
     If ngCount = 0 Then Exit Sub
 
-    totalNG  = totalNG + 1
-    isFirst  = True
-    prevVal  = ""
+    totalNG      = totalNG + 1
+    isFirst      = True
+    prevVal      = ""
     currentColor = COLOR_WHITE
 
     For Each ngVal In ngValues
@@ -973,12 +864,115 @@ Private Sub Access2I列チェック(ByRef wsResult As Worksheet, _
             .Cells(resultRow, 8).Value  = ngVal(1)
             .Cells(resultRow, 9).Value  = ngVal(2)
             .Cells(resultRow, 10).Value = ngVal(3)
-            .Cells(resultRow, 11).Value = ""
+            .Cells(resultRow, 11).Value = confirmNote
             .Cells(resultRow, 12).Value = "□"
 
             Call NG行書式設定(wsResult, resultRow, COL_NG1, currentColor)
             .Cells(resultRow, 6).Font.Color = RGB(192, 0, 0)
             .Cells(resultRow, 6).Font.Bold  = True
+            .Cells(resultRow, 11).WrapText  = True
+        End With
+        resultRow = resultRow + 1
+    Next ngVal
+
+    Call 区切り線描画(wsResult, resultRow - 1, COL_NG1)
+End Sub
+
+' ============================================================
+' Accessデータ3専用チェック（D列「2以外」ならNG）
+' 確認手順：【Accessデータ3確認手順】から取得
+' ============================================================
+Private Sub Access3D列チェック(ByRef wsResult As Worksheet, _
+                                ByRef resultRow As Long, _
+                                ByRef totalNG As Long, _
+                                ByRef totalCheck As Long, _
+                                ByVal wsConfig As Worksheet)
+    Dim wsAccess3    As Worksheet
+    Dim dataStartRow As Long
+    Dim dataLastRow  As Long
+    Dim k            As Long
+    Dim ngCount      As Long
+    Dim ngValues     As Object
+    Dim ngVal        As Variant
+    Dim isFirst      As Boolean
+    Dim dVal         As Variant
+    Dim isNG         As Boolean
+    Dim prevVal      As String
+    Dim currentColor As Long
+    Dim confirmNote  As String
+
+    confirmNote = 設定メモ取得(wsConfig, "Accessデータ3確認手順")
+
+    Set wsAccess3 = ThisWorkbook.Sheets(SHEET_ACCESS3)
+    dataStartRow  = 3
+    dataLastRow   = wsAccess3.Cells(wsAccess3.Rows.Count, 1).End(xlUp).Row
+
+    If dataLastRow < dataStartRow Then Exit Sub
+
+    ngCount = 0
+    Set ngValues = CreateObject("System.Collections.ArrayList")
+
+    For k = dataStartRow To dataLastRow
+        dVal = wsAccess3.Cells(k, 4).Value  ' D列（4列目）
+        isNG = False
+        If dVal = "" Then
+            isNG = True
+        ElseIf Not IsNumeric(dVal) Then
+            isNG = True
+        ElseIf CDbl(dVal) <> 2 Then
+            isNG = True
+        End If
+
+        If isNG Then
+            ngCount = ngCount + 1
+            ngValues.Add Array(wsAccess3.Cells(k, 1).Value, _
+                               wsAccess3.Cells(k, 2).Value, _
+                               wsAccess3.Cells(k, 3).Value, _
+                               IIf(dVal = "", "(空白)", CStr(dVal)))
+        End If
+    Next k
+
+    totalCheck = totalCheck + 1
+    If ngCount = 0 Then Exit Sub
+
+    totalNG      = totalNG + 1
+    isFirst      = True
+    prevVal      = ""
+    currentColor = COLOR_WHITE
+
+    For Each ngVal In ngValues
+        currentColor = 申請番号色(CStr(ngVal(0)), prevVal, currentColor)
+        prevVal = CStr(ngVal(0))
+
+        With wsResult
+            If isFirst Then
+                .Cells(resultRow, 1).Value  = totalCheck
+                .Cells(resultRow, 2).Value  = "D列"
+                .Cells(resultRow, 3).Value  = "D列チェック(2以外NG)"
+                .Cells(resultRow, 4).Value  = (dataLastRow - dataStartRow + 1) & "件"
+                .Cells(resultRow, 5).Value  = ngCount
+                .Cells(resultRow, 6).Value  = "❌NG"
+                isFirst = False
+            Else
+                .Cells(resultRow, 1).Value  = ""
+                .Cells(resultRow, 2).Value  = ""
+                .Cells(resultRow, 3).Value  = ""
+                .Cells(resultRow, 4).Value  = ""
+                .Cells(resultRow, 5).Value  = ""
+                .Cells(resultRow, 6).Value  = ""
+            End If
+
+            .Cells(resultRow, 7).Value  = ngVal(0)
+            .Cells(resultRow, 8).Value  = ngVal(1)
+            .Cells(resultRow, 9).Value  = ngVal(2)
+            .Cells(resultRow, 10).Value = ngVal(3)
+            .Cells(resultRow, 11).Value = confirmNote
+            .Cells(resultRow, 12).Value = "□"
+
+            Call NG行書式設定(wsResult, resultRow, COL_NG1, currentColor)
+            .Cells(resultRow, 6).Font.Color = RGB(192, 0, 0)
+            .Cells(resultRow, 6).Font.Bold  = True
+            .Cells(resultRow, 11).WrapText  = True
         End With
         resultRow = resultRow + 1
     Next ngVal
@@ -1124,6 +1118,7 @@ Private Sub Access引用一覧描画(ByRef wsResult As Worksheet, _
     Dim memoLine     As Variant
     Dim prevVal      As String
     Dim currentColor As Long
+    Dim rowVal       As String
 
     Set wsData    = ThisWorkbook.Sheets(sheetName)
     dataStartRow  = 3
@@ -1188,7 +1183,6 @@ Private Sub Access引用一覧描画(ByRef wsResult As Worksheet, _
     currentColor = COLOR_WHITE
 
     For k = dataStartRow To dataLastRow
-        Dim rowVal As String
         rowVal       = CStr(wsData.Cells(k, 1).Value)
         currentColor = 申請番号色(rowVal, prevVal, currentColor)
         prevVal      = rowVal
@@ -1337,8 +1331,6 @@ End Sub
 
 ' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 ' ★★★ ここからチェック結果シートモジュールに貼り付け ★★★
-' ※ VBAエディタ左ツリーの「Sheet（チェック結果）」を
-'    ダブルクリックして開いたモジュールに貼り付けてください
 ' ※ コメントアウト（行頭の '）を外して貼り付けてください
 ' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
