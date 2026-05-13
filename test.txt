@@ -1,47 +1,24 @@
-Sub ExportFAQ()
-    Dim ws As Worksheet
-    Dim fPath As Variant
-    Dim fNum As Integer
-    Dim lastRow As Long
-    Dim i As Long
-    Dim j As Integer
-    Dim line As String
-    Dim val As String
-
-    Set ws = ThisWorkbook.Sheets("FAQ")
-
-    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 2 Then
-        MsgBox "Error: No data in FAQ sheet."
-        Exit Sub
-    End If
-
-    fPath = Application.GetSaveAsFilename( _
-        InitialFileName:="FAQ_export_" & Format(Now, "YYYYMMDD") & ".csv", _
-        FileFilter:="CSV," & Chr(42) & ".csv")
-    If VarType(fPath) = vbBoolean Then Exit Sub
-
-    fNum = FreeFile
-    Open fPath For Output As #fNum
-
-    For i = 1 To lastRow
-        line = ""
-        For j = 1 To 5
-            val = CStr(ws.Cells(i, j).Value)
-            val = Replace(val, Chr(34), Chr(34) & Chr(34))
-            If InStr(val, Chr(44)) > 0 Or InStr(val, Chr(10)) > 0 Or InStr(val, Chr(34)) > 0 Then
-                val = Chr(34) & val & Chr(34)
-            End If
-            If j = 1 Then
-                line = val
-            Else
-                line = line & Chr(44) & val
-            End If
-        Next j
-        Print #fNum, line
-    Next i
-
-    Close #fNum
-
-    MsgBox "FAQ_export wo hozon shimashita."
-End Sub
+以下のCSVはヘルプデスクのFAQ一覧です。分類・Q・A・キーワード・信頼度の5列で構成されています。
+思考過程は出力せず、最終的なCSVのみを出力してください。
+STEP1：重複・類似の検出
+以下の基準で重複・類似しているFAQを検出してください：
+・Qの意味が同じまたは類似している
+・Aの内容が同じまたは類似している
+・分類が違っても内容が類似していれば対象とする
+・完全一致だけでなく表現が違っても意味が同じものも対象とする
+STEP2：グループ化と統合
+重複・類似しているFAQをグループ化し、1件に統合してください。統合ルール：
+・分類：最も適切なものを採用
+・Q：最も簡潔で分かりやすいものを採用
+・A：最も情報が多いものを採用、または複数を統合してオペレーターが電話口でそのまま読み上げられる口語文にする。箇条書き・番号・記号は使わず一続きの文章にすること。手順は「まず〜していただき、次に〜してください」のように説明すること。条件分岐は「〜の場合は〜、〜の場合は〜となります」のように読み上げる形にすること。敬語・丁寧語を使い職員に話しかける形にすること。改行は使わないこと
+・キーワード：全グループのキーワードを統合して「・」区切りで列挙
+・信頼度：最も高いものを採用
+STEP3：出力
+重複なしのFAQはそのまま、統合したFAQは統合後の内容で、全件を1つのCSVで出力してください。
+出力ルール：
+・出力はCSV形式のみ。説明文・前置き・補足は一切不要
+・最初の行は必ず以下のヘッダー行にすること
+"分類","Q","A","キーワード","信頼度"
+・各フィールドは必ずダブルクォートで囲むこと
+・改行は使わないこと
+・キーワードは「・」区切りで列挙すること
