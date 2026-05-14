@@ -1,9 +1,3 @@
-' 作業手順書G列のクリア（4〜13行目）
-For i = 4 To 13
-    wsM.Cells(i, 7).Value = "□"
-Next i
-
-
 Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
 
     If Target.Column <> 7 Then Exit Sub
@@ -12,11 +6,28 @@ Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean
     Cancel = True
 
     If Target.Value = "□" Then
+        ' 元の色をTagに保存してからOKに変更
+        Target.Comment.Delete
+        Target.AddComment CStr(Target.Interior.Color)
         Target.Value = "OK"
         Target.Interior.Color = RGB(198, 239, 206)
+
     ElseIf Target.Value = "OK" Then
+        ' 保存した元の色に戻す
+        Dim originalColor As Long
+        If Not Target.Comment Is Nothing Then
+            originalColor = CLng(Target.Comment.Text)
+            Target.Comment.Delete
+        Else
+            ' コメントがない場合は行番号で判定
+            If Target.Row Mod 2 = 0 Then
+                originalColor = RGB(189, 215, 238)  ' 青
+            Else
+                originalColor = RGB(255, 255, 255)  ' 白
+            End If
+        End If
         Target.Value = "□"
-        Target.Interior.Color = RGB(255, 199, 206)
+        Target.Interior.Color = originalColor
     End If
 
 End Sub
