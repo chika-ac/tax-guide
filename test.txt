@@ -31,3 +31,19 @@ Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean
     End If
 
 End Sub
+
+
+
+
+For i = 4 To 13
+    With wsM.Cells(i, 7)
+        .Value = "□"
+        .Comment.Delete
+        ' 行番号で元の色に戻す（4行目が青スタート）
+        If i Mod 2 = 0 Then
+            .Interior.Color = RGB(189, 215, 238)  ' 青
+        Else
+            .Interior.Color = RGB(255, 255, 255)  ' 白
+        End If
+    End With
+Next i
