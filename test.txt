@@ -1,7 +1,4 @@
-' コメントテキストから数値部分だけ抽出
-Dim commentText As String
-commentText = Target.Comment.Text
-' 改行で分割して最後の行（数値部分）を取得
-Dim lines() As String
-lines = Split(commentText, Chr(10))
-originalColor = CLng(Trim(lines(UBound(lines))))
+Const COLOR_BLUE As Long = 15787222  ' RGB(214, 228, 240) 薄青
+
+
+originalColor = 15787222  ' RGB(214, 228, 240) 青
