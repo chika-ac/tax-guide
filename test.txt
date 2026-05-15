@@ -1,23 +1,3 @@
-Attribute VB_Name = "Duplicates_v01"
-' ================================================================
-'  FAQ育成ツール 重複チェック・最終FAQ出力 v01
-'
-'  【追加手順】
-'  1. VBAエディタを開く（Alt+F11）
-'  2. 既存モジュールの末尾に追加、またはインポート
-'  3. ボタンを手動で作成して以下のマクロを登録
-'     重複チェックボタン → DetectDuplicates
-'     最終FAQ出力ボタン  → ExportFinalFAQ
-'
-'  【事前準備】
-'  FAQシートにデータが入っている状態で実行してください
-' ================================================================
-
-Option Explicit
-
-' ----------------------------------------------------------------
-' 重複候補検出
-' ----------------------------------------------------------------
 Sub DetectDuplicates()
     Dim wsFAQ As Worksheet
     Dim wsDup As Worksheet
@@ -31,6 +11,9 @@ Sub DetectDuplicates()
     Dim kwB As String
     Dim judgment As String
     Dim matchCount As Integer
+    Dim kwListA() As String
+    Dim m As Long
+    Dim kw As String
 
     Set wsFAQ = ThisWorkbook.Sheets("FAQ")
 
@@ -109,7 +92,6 @@ Sub DetectDuplicates()
     Application.ScreenUpdating = False
     outRow = 2
 
-    ' 総当たり比較
     For i = 2 To lastRow - 1
         qA = Trim(wsFAQ.Cells(i, 2).Value)
         kwA = Trim(wsFAQ.Cells(i, 4).Value)
@@ -123,19 +105,16 @@ Sub DetectDuplicates()
             judgment = ""
             matchCount = 0
 
-            ' ①Qが完全一致 → 大
+            ' Q完全一致 → 大
             If qA = qB Then
                 judgment = "Large"
                 GoTo WriteRow
             End If
 
-            ' ②キーワード一致数をカウント
+            ' キーワード一致数カウント
             If kwA <> "" And kwB <> "" Then
-                Dim kwListA() As String
-                Dim m As Long
                 kwListA = Split(kwA, ChrW(12539))
                 For m = 0 To UBound(kwListA)
-                    Dim kw As String
                     kw = Trim(kwListA(m))
                     If Len(kw) >= 2 Then
                         If InStr(kwB, kw) > 0 Then
@@ -145,7 +124,6 @@ Sub DetectDuplicates()
                 Next m
             End If
 
-            ' 一致数で判定
             If matchCount >= 4 Then
                 judgment = "Large"
             ElseIf matchCount = 3 Then
@@ -157,7 +135,6 @@ Sub DetectDuplicates()
             If judgment = "" Then GoTo NextJ
 
 WriteRow:
-            ' データ書き込み
             wsDup.Cells(outRow, 1).Value = judgment
             wsDup.Cells(outRow, 2).Value = i
             wsDup.Cells(outRow, 3).Value = wsFAQ.Cells(i, 1).Value
@@ -170,14 +147,12 @@ WriteRow:
             wsDup.Cells(outRow, 10).Value = wsFAQ.Cells(j, 3).Value
             wsDup.Cells(outRow, 11).Value = kwB
 
-            ' 書式
             wsDup.Rows(outRow).Font.Name = "Arial"
             wsDup.Rows(outRow).Font.Size = 9
             wsDup.Cells(outRow, 5).WrapText = True
             wsDup.Cells(outRow, 10).WrapText = True
             wsDup.Rows(outRow).RowHeight = 45
 
-            ' 色分け
             If judgment = "Large" Then
                 wsDup.Cells(outRow, 1).Interior.Color = RGB(255, 199, 206)
             ElseIf judgment = "Middle" Then
@@ -186,8 +161,6 @@ WriteRow:
                 wsDup.Cells(outRow, 1).Interior.Color = RGB(198, 239, 206)
             End If
 
-            ' ActionのドロップダウンをL列に設定
-            Dim dv As Validation
             On Error Resume Next
             wsDup.Cells(outRow, 12).Validation.Delete
             On Error GoTo 0
@@ -207,158 +180,5 @@ NextI:
 
     Application.ScreenUpdating = True
 
-    MsgBox outRow - 2 & " ken no duplicate koho wo検出 shimashita."
-End Sub
-
-' ----------------------------------------------------------------
-' 最終FAQ出力
-' ----------------------------------------------------------------
-Sub ExportFinalFAQ()
-    Dim wsFAQ As Worksheet
-    Dim wsDup As Worksheet
-    Dim wsFinal As Worksheet
-    Dim lastRowFAQ As Long
-    Dim lastRowDup As Long
-    Dim i As Long
-    Dim outRow As Long
-    Dim action As String
-
-    Set wsFAQ = ThisWorkbook.Sheets("FAQ")
-
-    ' DuplicatesシートチェックDim
-    Dim sheetExists As Boolean
-    sheetExists = False
-    Dim s As Worksheet
-    For Each s In ThisWorkbook.Sheets
-        If s.Name = "Duplicates" Then
-            sheetExists = True
-            Exit For
-        End If
-    Next s
-
-    If Not sheetExists Then
-        MsgBox "Error: Duplicates sheet not found. Please run DetectDuplicates first."
-        Exit Sub
-    End If
-
-    Set wsDup = ThisWorkbook.Sheets("Duplicates")
-
-    ' FinalFAQシートを作成または初期化
-    Dim finalExists As Boolean
-    finalExists = False
-    For Each s In ThisWorkbook.Sheets
-        If s.Name = "FinalFAQ" Then
-            finalExists = True
-            Exit For
-        End If
-    Next s
-
-    If finalExists Then
-        Set wsFinal = ThisWorkbook.Sheets("FinalFAQ")
-        wsFinal.Cells.ClearContents
-        wsFinal.Cells.Interior.ColorIndex = xlNone
-    Else
-        Set wsFinal = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
-        wsFinal.Name = "FinalFAQ"
-    End If
-
-    ' ヘッダーコピー
-    wsFAQ.Rows(1).Copy wsFinal.Rows(1)
-
-    lastRowFAQ = wsFAQ.Cells(wsFAQ.Rows.Count, 1).End(xlUp).Row
-    lastRowDup = wsDup.Cells(wsDup.Rows.Count, 1).End(xlUp).Row
-
-    Application.ScreenUpdating = False
-    outRow = 2
-
-    ' FAQシートの各行を処理
-    For i = 2 To lastRowFAQ
-
-        ' この行がDuplicatesに登場するか確認
-        Dim foundInDup As Boolean
-        Dim dupRow As Long
-        Dim isRowA As Boolean
-        foundInDup = False
-        dupRow = 0
-        isRowA = False
-
-        Dim d As Long
-        For d = 2 To lastRowDup
-            If wsDup.Cells(d, 2).Value = i Then
-                foundInDup = True
-                dupRow = d
-                isRowA = True
-                Exit For
-            ElseIf wsDup.Cells(d, 7).Value = i Then
-                foundInDup = True
-                dupRow = d
-                isRowA = False
-                Exit For
-            End If
-        Next d
-
-        If Not foundInDup Then
-            ' 重複なし → そのまま出力
-            wsFAQ.Rows(i).Copy wsFinal.Rows(outRow)
-            outRow = outRow + 1
-        Else
-            ' 重複あり → Actionを確認
-            action = Trim(wsDup.Cells(dupRow, 12).Value)
-            If action = "" Then action = "Ryoho_Nokosu"
-
-            Select Case action
-                Case "A_Nokosu"
-                    If isRowA Then
-                        wsFAQ.Rows(i).Copy wsFinal.Rows(outRow)
-                        outRow = outRow + 1
-                    End If
-                Case "B_Nokosu"
-                    If Not isRowA Then
-                        wsFAQ.Rows(i).Copy wsFinal.Rows(outRow)
-                        outRow = outRow + 1
-                    End If
-                Case "Ryoho_Nokosu"
-                    wsFAQ.Rows(i).Copy wsFinal.Rows(outRow)
-                    outRow = outRow + 1
-                Case "Ryoho_Sakujo_Shinkiseisei"
-                    ' 新規作成データをM〜P列から取得（行Aのときのみ出力して重複を防ぐ）
-                    If isRowA Then
-                        Dim newQ As String
-                        Dim newA As String
-                        Dim newKw As String
-                        Dim newShin As String
-                        newQ = Trim(wsDup.Cells(dupRow, 13).Value)
-                        newA = Trim(wsDup.Cells(dupRow, 14).Value)
-                        newKw = Trim(wsDup.Cells(dupRow, 15).Value)
-                        newShin = Trim(wsDup.Cells(dupRow, 16).Value)
-                        If newQ <> "" Then
-                            wsFinal.Cells(outRow, 1).Value = wsFAQ.Cells(i, 1).Value
-                            wsFinal.Cells(outRow, 2).Value = newQ
-                            wsFinal.Cells(outRow, 3).Value = newA
-                            wsFinal.Cells(outRow, 4).Value = newKw
-                            wsFinal.Cells(outRow, 5).Value = newShin
-                            wsFinal.Cells(outRow, 6).Value = wsFAQ.Cells(i, 6).Value
-                            wsFinal.Rows(outRow).Font.Name = "Arial"
-                            wsFinal.Rows(outRow).Font.Size = 9
-                            outRow = outRow + 1
-                        End If
-                    End If
-                Case "Ryoho_Sakujo"
-                    ' 何も出力しない
-            End Select
-        End If
-    Next i
-
-    ' 列幅調整
-    wsFinal.Columns(1).ColumnWidth = 18
-    wsFinal.Columns(2).ColumnWidth = 35
-    wsFinal.Columns(3).ColumnWidth = 60
-    wsFinal.Columns(4).ColumnWidth = 25
-    wsFinal.Columns(5).ColumnWidth = 10
-    wsFinal.Columns(6).ColumnWidth = 12
-    wsFinal.Cells(1, 3).WrapText = True
-
-    Application.ScreenUpdating = True
-
-    MsgBox outRow - 2 & " ken no FAQ wo FinalFAQ sheet ni shutsuryoku shimashita."
+    MsgBox outRow - 2 & " ken no duplicate koho wo detect shimashita."
 End Sub
