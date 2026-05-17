@@ -30,4 +30,7 @@ Sub CSVを取り込む()
     ' QueryTable削除（データだけ残す）
     qt.Delete
 
-    Appli
+    Application.ScreenUpdating = True
+
+    MsgBox "取り込みが完了しました", vbInformation, "CSV取り込み"
+End Sub
