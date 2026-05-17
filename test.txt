@@ -1,1 +1,33 @@
-ThisWorkbook.Sheets("操作パネル").Activate
+Sub CSVを取り込む()
+    Dim filePath As String
+    filePath = Application.GetOpenFilename("CSVファイル,*.csv", , "CSVファイルを選択してください")
+    If filePath = "False" Then Exit Sub
+
+    Application.ScreenUpdating = False
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("データ")
+
+    ' 既存データをクリア（ヘッダー2行は残す）
+    ws.Rows("3:" & ws.Rows.Count).ClearContents
+
+    ' QueryTableで取り込み（ダブルクォート内のカンマを正しく処理）
+    Dim qt As QueryTable
+    Set qt = ws.QueryTables.Add( _
+        Connection:="TEXT;" & filePath, _
+        Destination:=ws.Cells(3, 1))
+
+    With qt
+        .TextFileParseType      = xlDelimited
+        .TextFileCommaDelimiter = True
+        .TextFileTextQualifier  = xlTextQualifierDoubleQuote
+        .TextFileConsecutiveDelimiter = False
+        .RefreshBackgroundQuery = False
+        .AdjustColumnWidth      = False
+        .Refresh BackgroundQuery:=False
+    End With
+
+    ' QueryTable削除（データだけ残す）
+    qt.Delete
+
+    Appli
