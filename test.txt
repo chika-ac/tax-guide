@@ -1,1 +1,1 @@
-? ThisWorkbook.Sheets("操作パネル").Cells(23, 5).Value
+? ThisWorkbook.Sheets("データ").Cells(2, 10).Value
