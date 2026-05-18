@@ -1,5 +1,306 @@
-Case "行取込"
-    MsgBox "行" & i & " wks=[" & wks & "] dst=[" & dst & "] IsNumeric=" & IsNumeric(Trim(wks))
-    dst_row = FindLabelRow(dst)
-    dst_col_start = IIf(CLng(Trim(wks)) = 4, 3, 18)
-    MsgBox "dst_row=" & dst_row & " dst_col_start=" & dst_col_start
+' ============================================================
+' 週次報告書　VBAモジュール（シンプル版）
+'
+' 設定テーブル（操作パネル）の列構成：
+'   B列：ファイルキーワード　例）CCP、タカコム
+'   C列：取込元シート名
+'   D列：起点セル（取込元の一番左/上のセル）
+'   E列：方向　横 or 縦
+'   F列：個数　取込むセル数
+'   G列：転記先シート名　例）報告書、詳細データ
+'   H列：転記先セル　例）C33
+'   I列：備考（VBAは読まない）
+'
+' 【組み込み手順】
+'   1. Alt+F11 → 挿入 → 標準モジュール
+'   2. このコードを全て貼り付ける
+'   3. ボタン①に ReflectDates、ボタン②に PrepareForSubmission を割り当て
+' ============================================================
+
+Const TABLE_SHEET     As String = "操作パネル"
+Const TABLE_ROW_START As Long = 20
+Const COL_KEYWORD  As Long = 2   ' B
+Const COL_SH_SRC   As Long = 3   ' C：取込元シート名
+Const COL_CELL_SRC As Long = 4   ' D：起点セル
+Const COL_DIR      As Long = 5   ' E：方向
+Const COL_COUNT    As Long = 6   ' F：個数
+Const COL_SH_DST   As Long = 7   ' G：転記先シート名
+Const COL_CELL_DST As Long = 8   ' H：転記先セル
+
+
+' ============================================================
+' ボタン①　データ取込・報告書に反映
+' ============================================================
+Sub ReflectDates()
+
+    Dim ws_p As Worksheet
+    Set ws_p = ThisWorkbook.Worksheets("操作パネル")
+
+    If IsEmpty(ws_p.Range("C4").Value) Or Not IsDate(ws_p.Range("C4").Value) Then
+        MsgBox "C4セルに報告対象週の初日（月曜日）を入力してください。", vbExclamation
+        Exit Sub
+    End If
+
+    Dim d As Date
+    d = CDate(ws_p.Range("C4").Value)
+
+    If Weekday(d, vbMonday) <> 1 Then
+        MsgBox "月曜日の日付を入力してください。" & Chr(10) & _
+               Format(d, "YYYY/M/D（AAA）"), vbExclamation
+        Exit Sub
+    End If
+
+    ' 報告対象週を報告書に表示
+    With ThisWorkbook.Worksheets("報告書").Range("C2")
+        .Value = "報告対象週：" & Format(d, "M/D（AAA）") & _
+                 " 〜 " & Format(d + 4, "M/D（AAA）")
+        .Font.Bold = True
+        .Font.Italic = False
+        .Font.Color = RGB(31, 73, 125)
+    End With
+
+    Call ImportData
+    Call UpdateWeeklyComparison
+
+    MsgBox "完了しました！" & Chr(10) & _
+           "報告対象週：" & Format(d, "M/D（AAA）") & _
+           " 〜 " & Format(d + 4, "M/D（AAA）"), vbInformation
+End Sub
+
+
+' ============================================================
+' 設定テーブルを読んで転記
+' ============================================================
+Sub ImportData()
+
+    Dim ws_p As Worksheet
+    Set ws_p = ThisWorkbook.Worksheets(TABLE_SHEET)
+
+    Dim last_row As Long
+    last_row = ws_p.Cells(ws_p.Rows.Count, COL_KEYWORD).End(xlUp).Row
+
+    ' 開いた外部ファイルをキャッシュ（同じファイルを何度も開かない）
+    Dim cache As Object
+    Set cache = CreateObject("Scripting.Dictionary")
+
+    Application.ScreenUpdating = False
+
+    Dim i As Long
+    For i = TABLE_ROW_START To last_row
+
+        ' 各列を読む
+        Dim kw       As String: kw       = Trim(CStr(ws_p.Cells(i, COL_KEYWORD).Value))
+        Dim sh_src   As String: sh_src   = Trim(CStr(ws_p.Cells(i, COL_SH_SRC).Value))
+        Dim cell_src As String: cell_src = Trim(CStr(ws_p.Cells(i, COL_CELL_SRC).Value))
+        Dim dir      As String: dir      = Trim(CStr(ws_p.Cells(i, COL_DIR).Value))
+        Dim cnt_str  As String: cnt_str  = Trim(CStr(ws_p.Cells(i, COL_COUNT).Value))
+        Dim sh_dst   As String: sh_dst   = Trim(CStr(ws_p.Cells(i, COL_SH_DST).Value))
+        Dim cell_dst As String: cell_dst = Trim(CStr(ws_p.Cells(i, COL_CELL_DST).Value))
+
+        ' 空行・未入力はスキップ
+        If kw = "" Or sh_src = "" Or cell_src = "" Then GoTo NextRow
+        If sh_dst = "" Or cell_dst = "" Then GoTo NextRow
+        If Not IsNumeric(cnt_str) Then GoTo NextRow
+
+        Dim n As Long: n = CLng(cnt_str)
+        If n <= 0 Then GoTo NextRow
+
+        ' プレースホルダーはスキップ
+        If InStr(cell_src, "起点セル") > 0 Then GoTo NextRow
+
+        ' 外部ファイルをキャッシュから取得 or 新規オープン
+        Dim wb_src As Workbook
+        If cache.Exists(kw) Then
+            Set wb_src = cache(kw)
+        Else
+            Dim fp As String
+            fp = FindFile(kw, ThisWorkbook.Path)
+            If fp = "" Then
+                MsgBox "「" & kw & "」を含むファイルが見つかりません。" & Chr(10) & _
+                       "報告書と同じフォルダに置いてください。（" & i & "行目）", vbExclamation
+                GoTo NextRow
+            End If
+            Set wb_src = Workbooks.Open(fp, ReadOnly:=True)
+            cache.Add kw, wb_src
+        End If
+
+        ' 取込元シートを取得
+        Dim ws_src As Worksheet
+        On Error Resume Next
+        Set ws_src = wb_src.Worksheets(sh_src)
+        On Error GoTo 0
+        If ws_src Is Nothing Then
+            MsgBox "取込元シート「" & sh_src & "」が見つかりません。（" & i & "行目）", vbExclamation
+            GoTo NextRow
+        End If
+
+        ' 転記先シートを取得
+        Dim ws_dst As Worksheet
+        On Error Resume Next
+        Set ws_dst = ThisWorkbook.Worksheets(sh_dst)
+        On Error GoTo 0
+        If ws_dst Is Nothing Then
+            MsgBox "転記先シート「" & sh_dst & "」が見つかりません。（" & i & "行目）", vbExclamation
+            GoTo NextRow
+        End If
+
+        ' 転記先の起点セルを取得
+        Dim rng_dst As Range
+        On Error Resume Next
+        Set rng_dst = ws_dst.Range(cell_dst)
+        On Error GoTo 0
+        If rng_dst Is Nothing Then
+            MsgBox "転記先セル「" & cell_dst & "」が無効です。（" & i & "行目）", vbExclamation
+            GoTo NextRow
+        End If
+
+        ' 取込元から n 個読んで転記先に貼る
+        Dim j As Long
+        For j = 0 To n - 1
+            Dim val As Variant
+            If dir = "縦" Then
+                val = ws_src.Range(cell_src).Offset(j, 0).Value
+                rng_dst.Offset(j, 0).Value = val
+            Else
+                ' 横（デフォルト）
+                val = ws_src.Range(cell_src).Offset(0, j).Value
+                rng_dst.Offset(0, j).Value = val
+            End If
+        Next j
+
+NextRow:
+        Set ws_src = Nothing
+        Set ws_dst = Nothing
+        Set rng_dst = Nothing
+    Next i
+
+    ' 開いた外部ファイルを全て閉じる
+    Dim k As Variant
+    For Each k In cache.Keys
+        cache(k).Close SaveChanges:=False
+    Next k
+
+    Application.ScreenUpdating = True
+End Sub
+
+
+' ============================================================
+' 同フォルダからキーワードを含むExcelファイルを検索
+' ============================================================
+Function FindFile(keyword As String, folder As String) As String
+    Dim f As String
+    Dim ext As Variant
+    For Each ext In Array("*.xlsx", "*.xlsm")
+        f = Dir(folder & "\" & ext)
+        Do While f <> ""
+            If InStr(f, keyword) > 0 And f <> ThisWorkbook.Name Then
+                FindFile = folder & "\" & f
+                Exit Function
+            End If
+            f = Dir()
+        Loop
+    Next ext
+    FindFile = ""
+End Function
+
+
+' ============================================================
+' 先週比をKPIサマリに反映
+' ============================================================
+Sub UpdateWeeklyComparison()
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets("報告書")
+
+    ' 報告書の実際の行番号（変わった場合はここを修正）
+    Dim r_nyuden As Long: r_nyuden = 27   ' ①入電件数
+    Dim r_houki  As Long: r_houki  = 28   ' 　②放棄呼数
+    Dim r_hassin As Long: r_hassin = 31   ' ④発信件数
+    Dim r_zentai As Long: r_zentai = 32   ' ⑤全体対応件数
+    Dim r_stage1 As Long: r_stage1 = 57   ' 第一段階
+    Dim r_stage2 As Long: r_stage2 = 72   ' 第二段階
+    Dim r_kpi1   As Long: r_kpi1   = 9    ' KPI1段目の先週比行
+    Dim r_kpi2   As Long: r_kpi2   = 14   ' KPI2段目の先週比行
+
+    ' 第4週(R〜V列) vs 第3週(M〜Q列)
+    Dim n As Long, p As Long
+
+    ' 全体対応件数
+    n = WorksheetFunction.Sum(ws.Range("R" & r_zentai & ":V" & r_zentai))
+    p = WorksheetFunction.Sum(ws.Range("M" & r_zentai & ":Q" & r_zentai))
+    ws.Range("A" & r_kpi1).Value = FormatDiff(n - p) & "件"
+
+    ' 入電件数
+    n = WorksheetFunction.Sum(ws.Range("R" & r_nyuden & ":V" & r_nyuden))
+    p = WorksheetFunction.Sum(ws.Range("M" & r_nyuden & ":Q" & r_nyuden))
+    ws.Range("D" & r_kpi1).Value = FormatDiff(n - p) & "件"
+
+    ' 発信件数
+    n = WorksheetFunction.Sum(ws.Range("R" & r_hassin & ":V" & r_hassin))
+    p = WorksheetFunction.Sum(ws.Range("M" & r_hassin & ":Q" & r_hassin))
+    ws.Range("G" & r_kpi1).Value = FormatDiff(n - p) & "件"
+
+    ' 放棄呼数
+    Dim n_h As Long: n_h = WorksheetFunction.Sum(ws.Range("R" & r_houki & ":V" & r_houki))
+    Dim p_h As Long: p_h = WorksheetFunction.Sum(ws.Range("M" & r_houki & ":Q" & r_houki))
+    ws.Range("J" & r_kpi1).Value = FormatDiff(n_h - p_h) & "件"
+
+    ' 呼損率
+    Dim n_ny As Long: n_ny = WorksheetFunction.Sum(ws.Range("R" & r_nyuden & ":V" & r_nyuden))
+    Dim p_ny As Long: p_ny = WorksheetFunction.Sum(ws.Range("M" & r_nyuden & ":Q" & r_nyuden))
+    If n_ny > 0 And p_ny > 0 Then
+        ws.Range("M" & r_kpi1).Value = _
+            FormatDiff(Format((n_h / n_ny - p_h / p_ny) * 100, "0.0")) & "%"
+    End If
+
+    ' 第一段階
+    n = WorksheetFunction.Sum(ws.Range("R" & r_stage1 & ":V" & r_stage1))
+    p = WorksheetFunction.Sum(ws.Range("M" & r_stage1 & ":Q" & r_stage1))
+    ws.Range("E" & r_kpi2).Value = FormatDiff(n - p) & "件"
+
+    ' 第二段階
+    n = WorksheetFunction.Sum(ws.Range("R" & r_stage2 & ":V" & r_stage2))
+    p = WorksheetFunction.Sum(ws.Range("M" & r_stage2 & ":Q" & r_stage2))
+    ws.Range("I" & r_kpi2).Value = FormatDiff(n - p) & "件"
+
+End Sub
+
+
+' ============================================================
+' 差分フォーマット　先週比：▲N / ▼N / ±0
+' ============================================================
+Function FormatDiff(diff As Variant) As String
+    Dim n As Double: n = CDbl(diff)
+    If n > 0 Then
+        FormatDiff = "先週比：▲" & diff
+    ElseIf n < 0 Then
+        FormatDiff = "先週比：▼" & Abs(diff)
+    Else
+        FormatDiff = "先週比：±0"
+    End If
+End Function
+
+
+' ============================================================
+' ボタン②　提出用に整える（操作パネル・作業データ削除）
+' ============================================================
+Sub PrepareForSubmission()
+
+    If MsgBox("操作パネルと作業データシートを削除して提出用ファイルにします。" & Chr(10) & _
+              "この操作は元に戻せません。よろしいですか？", _
+              vbYesNo + vbExclamation, "提出用に整える") = vbNo Then Exit Sub
+
+    Application.DisplayAlerts = False
+    Dim nm As Variant
+    For Each nm In Array("操作パネル", "作業データ")
+        On Error Resume Next
+        ThisWorkbook.Worksheets(nm).Delete
+        On Error GoTo 0
+    Next nm
+    Application.DisplayAlerts = True
+
+    ThisWorkbook.Worksheets("報告書").Activate
+    ThisWorkbook.Save
+    MsgBox "完了しました。", vbInformation
+
+End Sub
