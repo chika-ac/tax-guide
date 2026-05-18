@@ -1,7 +1,5 @@
 Case "行取込"
     MsgBox "行" & i & " wks=[" & wks & "] dst=[" & dst & "] IsNumeric=" & IsNumeric(Trim(wks))
-    Dim dst_row As Long
     dst_row = FindLabelRow(dst)
-    Dim dst_col_start As Long
     dst_col_start = IIf(CLng(Trim(wks)) = 4, 3, 18)
     MsgBox "dst_row=" & dst_row & " dst_col_start=" & dst_col_start
