@@ -1,1 +1,4 @@
 total = IIf(IsNumeric(Trim(wks)), CLng(Trim(wks)) * 5, 0)
+
+
+dst_col_start = IIf(CLng(Trim(wks)) = 4, 3, 18)
