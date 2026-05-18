@@ -109,7 +109,7 @@ Sub ImportByStartCell()
                 GoTo NextRow
             End If
             Set wb_src = Workbooks.Open(fp, ReadOnly:=True)
-            cache(kw) = wb_src
+            cache.Add kw, wb_src
         End If
 
         ' 取込元シート
