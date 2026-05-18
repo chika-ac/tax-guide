@@ -354,7 +354,7 @@ Skip1:
     For wk = 0 To 3
         Dim wkMon As Date: wkMon = weekDates(wk * 5)
         Dim wkFri As Date: wkFri = weekDates(wk * 5 + 4)
-        ws.merge_cells(2, 2 + wk * 5, 2, 2 + wk * 5 + 4)
+        ws.Range(ws.Cells(2, 2 + wk * 5), ws.Cells(2, 2 + wk * 5 + 4)).Merge
         Dim wkCell As Range: Set wkCell = ws.Cells(2, 2 + wk * 5)
         wkCell.Value = Month(wkMon) & "/" & Day(wkMon) & "週"
         wkCell.Font.Bold = True: wkCell.Font.Name = "Meiryo UI"
@@ -463,7 +463,7 @@ Skip2:
     Dim wk As Integer
     For wk = 0 To 3
         Dim wkMon As Date: wkMon = weekDates(wk * 5)
-        ws.merge_cells(2, 4 + wk * 5, 2, 4 + wk * 5 + 4)
+        ws.Range(ws.Cells(2, 4 + wk * 5), ws.Cells(2, 4 + wk * 5 + 4)).Merge
         Dim wkCell As Range: Set wkCell = ws.Cells(2, 4 + wk * 5)
         wkCell.Value = Month(wkMon) & "/" & Day(wkMon) & "週"
         wkCell.Font.Bold = True: wkCell.Font.Name = "Meiryo UI"
@@ -726,7 +726,7 @@ Skip6:
     Dim wk As Integer
     For wk = 0 To 3
         Dim wkMon As Date: wkMon = weekDates(wk * 5)
-        ws.merge_cells(2, 2 + wk * 5, 2, 2 + wk * 5 + 4)
+        ws.Range(ws.Cells(2, 2 + wk * 5), ws.Cells(2, 2 + wk * 5 + 4)).Merge
         Dim wkCell As Range: Set wkCell = ws.Cells(2, 2 + wk * 5)
         wkCell.Value = Month(wkMon) & "/" & Day(wkMon) & "週"
         wkCell.Font.Bold = True: wkCell.Font.Name = "Meiryo UI"
@@ -831,7 +831,7 @@ Skip7:
     Dim wk As Integer
     For wk = 0 To 3
         Dim wkMon As Date: wkMon = weekDates(wk * 5)
-        ws.merge_cells(2, 8 + wk * 5, 2, 8 + wk * 5 + 4)
+        ws.Range(ws.Cells(2, 8 + wk * 5), ws.Cells(2, 8 + wk * 5 + 4)).Merge
         Dim wkCell As Range: Set wkCell = ws.Cells(2, 8 + wk * 5)
         wkCell.Value = Month(wkMon) & "/" & Day(wkMon) & "週"
         wkCell.Font.Bold = True: wkCell.Font.Name = "Meiryo UI"
