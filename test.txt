@@ -1,22 +1,4 @@
-Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
-    Dim ws  As Worksheet: Set ws  = ThisWorkbook.Sheets(S_CAT_WEEK)
-    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
-    Dim pws As Worksheet: Set pws = ThisWorkbook.Sheets(PANEL_SHEET)
-    ws.Cells.Clear
-    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 2 Then Exit Sub
-
-    Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
-    Dim colC As Long: colC = ColIdx(dws, "業務分類詳細")
-    If colD = 0 Or colC = 0 Then Exit Sub
-
-    Dim thisMonday As Date: thisMonday = WeekMon(dtE)
-    Dim lastMonday As Date: lastMonday = thisMonday - 7
-    Dim thisSunday As Date: thisSunday = thisMonday + 6
-    Dim lastSunday As Date: lastSunday = lastMonday + 6
-
-    ' 操作パネルE23以降: D列の大分類 → E列の表示名称にマッピング
-    Dim labelMap  As Object: Set labelMap  = CreateObject("Scripting.Dictionary")
+Dim labelMap  As Object: Set labelMap  = CreateObject("Scripting.Dictionary")
     Dim sortOrder As New Collection
     Dim sortSet   As Object: Set sortSet   = CreateObject("Scripting.Dictionary")
     Dim pr As Long: pr = 23
@@ -24,10 +6,8 @@ Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
         Dim sLabel As String: sLabel = Trim(CStr(pws.Cells(pr, 5).Value))
         Dim sCat   As String: sCat   = Trim(CStr(pws.Cells(pr, 4).Value))
         If sLabel <> "" And sCat <> "" Then
-            ' D列の値から大分類（スペース前）を取り出してキーにする
-            Dim sbig As String, ssmall As String
-            GetBigSmall sCat, sbig, ssmall
-            If Not labelMap.Exists(sbig) Then labelMap.Add sbig, sLabel
+            ' D列の値をそのままキーにする（完全一致）
+            If Not labelMap.Exists(sCat) Then labelMap.Add sCat, sLabel
             If Not sortSet.Exists(sLabel) Then
                 sortOrder.Add sLabel: sortSet.Add sLabel, True
             End If
@@ -35,24 +15,12 @@ Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
         pr = pr + 1
     Loop
 
-    ' データ集計（大分類をE列表示名に変換して合算）
-    Dim thisCnt  As Object: Set thisCnt  = CreateObject("Scripting.Dictionary")
-    Dim lastCnt  As Object: Set lastCnt  = CreateObject("Scripting.Dictionary")
-    Dim bigOrder As New Collection
-    Dim bigSet   As Object: Set bigSet   = CreateObject("Scripting.Dictionary")
 
-    Dim r As Long
-    For r = 2 To lastRow
-        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip5
-        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
-        Dim cv As String: cv = Trim(CStr(dws.Cells(r, colC).Value))
-        If cv = "" Or cv = "Empty" Then GoTo Skip5
 
-        ' 大分類を取り出してE列の表示名にマッピング
-        Dim big As String, small As String
-        GetBigSmall cv, big, small
+
+' D列の値をそのままキーにしてE列の表示名を引く
         Dim dispName As String
-        dispName = IIf(labelMap.Exists(big), labelMap(big), big)
+        dispName = IIf(labelMap.Exists(cv), labelMap(cv), cv)
 
         If Not bigSet.Exists(dispName) Then bigSet.Add dispName, True: bigOrder.Add dispName
         If d >= thisMonday And d <= thisSunday Then
@@ -61,70 +29,3 @@ Sub BuildCatWeekSheet(dtS As Date, dtE As Date)
         If d >= lastMonday And d <= lastSunday Then
             lastCnt(dispName) = IIf(lastCnt.Exists(dispName), lastCnt(dispName) + 1, 1)
         End If
-Skip5:
-    Next r
-
-    ' 並び順構築（E列指定順→未指定は末尾、0件も表示）
-    Dim sortedBig As New Collection
-    Dim addedSet  As Object: Set addedSet = CreateObject("Scripting.Dictionary")
-
-    Dim so As Variant
-    For Each so In sortOrder
-        If Not addedSet.Exists(so) Then
-            sortedBig.Add so: addedSet.Add so, True
-        End If
-    Next so
-    Dim bk2 As Variant
-    For Each bk2 In bigOrder
-        If Not addedSet.Exists(bk2) Then
-            sortedBig.Add bk2: addedSet.Add bk2, True
-        End If
-    Next bk2
-
-    StyleTitle ws, "カテゴリー別（週比較）", dtS, dtE
-
-    Dim thisLbl As String
-    Dim lastLbl As String
-    thisLbl = "今週（" & Month(thisMonday) & "/" & Day(thisMonday) & "～" & Month(thisSunday) & "/" & Day(thisSunday) & "）"
-    lastLbl = "先週（" & Month(lastMonday) & "/" & Day(lastMonday) & "～" & Month(lastSunday) & "/" & Day(lastSunday) & "）"
-
-    ws.Cells(2, 1).Value = "分類"
-    ws.Cells(2, 2).Value = thisLbl
-    ws.Cells(2, 3).Value = lastLbl
-    ws.Cells(2, 4).Value = "差分"
-    StyleHeader ws, 2, 4
-    ws.Rows(2).RowHeight = 36
-
-    Dim rOut As Long: rOut = 3
-    Dim bk As Variant
-    For Each bk In sortedBig
-        Dim tc As Long: tc = IIf(thisCnt.Exists(bk), thisCnt(bk), 0)
-        Dim lc As Long: lc = IIf(lastCnt.Exists(bk), lastCnt(bk), 0)
-        Dim df As Long: df = tc - lc
-        ws.Cells(rOut, 1).Value = bk
-        ws.Cells(rOut, 2).Value = tc
-        ws.Cells(rOut, 3).Value = lc
-        ws.Cells(rOut, 4).Value = df
-        ColorDiff ws.Cells(rOut, 4), df
-        rOut = rOut + 1
-    Next bk
-
-    ws.Cells(rOut, 1).Value = "合計"
-    ws.Cells(rOut, 2).Value = "=SUM(" & ws.Cells(3, 2).Address(False, False) & ":" & ws.Cells(rOut - 1, 2).Address(False, False) & ")"
-    ws.Cells(rOut, 3).Value = "=SUM(" & ws.Cells(3, 3).Address(False, False) & ":" & ws.Cells(rOut - 1, 3).Address(False, False) & ")"
-    ws.Cells(rOut, 4).Value = "=" & ws.Cells(rOut, 2).Address(False, False) & "-" & ws.Cells(rOut, 3).Address(False, False)
-    StyleData ws, 3, rOut - 1, 1, 4
-    StyleTotal ws, rOut, 1, 4
-
-    rOut = rOut + 2
-    ws.Cells(rOut, 1).Value = "【週の判定基準】終了日（" & Format(dtE, "m/d") & "）を含む週を今週とします。差分 = 今週 - 先週"
-    With ws.Cells(rOut, 1).Font
-        .Name = "Meiryo UI": .Size = 9: .Color = RGB(100, 100, 100): .Italic = True
-    End With
-
-    AutoFitSheet ws
-    ws.Columns(1).ColumnWidth = 24
-    ws.Columns(2).ColumnWidth = 22
-    ws.Columns(3).ColumnWidth = 22
-    ws.Columns(4).ColumnWidth = 12
-End Sub
