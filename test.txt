@@ -1,4 +1,2 @@
-total = IIf(IsNumeric(Trim(wks)), CLng(Trim(wks)) * 5, 0)
-
-
-dst_col_start = IIf(CLng(Trim(wks)) = 4, 3, 18)
+Case "行取込"
+    MsgBox "行" & i & " wks=[" & wks & "] dst=[" & dst & "] IsNumeric=" & IsNumeric(Trim(wks))
