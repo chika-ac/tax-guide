@@ -1,321 +1,846 @@
-' ============================================================
-' 週次報告書　VBAモジュール
-' ファイル：02_01ヘルプデスク運用に関する週次報告書_work.xlsx
-' ============================================================
-' 【組み込み手順】
-'   1. Alt+F11 でVBAエディタを開く
-'   2. 挿入 → 標準モジュール
-'   3. このコードを全て貼り付ける
-'   4. 操作パネルのボタン①に ReflectDates を割り当て
-'   5. 操作パネルのボタン②に PrepareForSubmission を割り当て
-' ============================================================
+Attribute VB_Name = "Module1"
+Option Explicit
 
-' ------------------------------------------------------------
-' 定数：転記設定テーブルの場所（操作パネルシート）
-' ------------------------------------------------------------
-Const TABLE_SHEET     As String = "操作パネル"
-Const TABLE_ROW_START As Long = 19  ' データ行の開始行（ヘッダーの次）
-Const COL_SRC_KEYWORD As Long = 2   ' B列：取込元ファイルキーワード
-Const COL_SRC_SHEET   As Long = 3   ' C列：取込元シート名
-Const COL_SRC_CELL    As Long = 4   ' D列：取込元セル
-Const COL_DST_SHEET   As Long = 5   ' E列：転記先シート名
-Const COL_DST_CELL    As Long = 6   ' F列：転記先セル
+' ===== シート名 =====
+Const DATA_SHEET  As String = "データ"
+Const PANEL_SHEET As String = "操作パネル"
+Const S_HISTORY   As String = "新規履歴件数"
+Const S_CAT_DTL   As String = "カテゴリー別詳細"
+Const S_CAT_WEEK  As String = "カテゴリー別（週比較）"
+Const S_BUREAU    As String = "問い合わせの多い区局"
+Const S_STAFF     As String = "受付担当者別対応件数"
 
-
-' ============================================================
-' ① データ取込・報告書に反映
-' ============================================================
-Sub ReflectDates()
-
-    Dim ws_panel As Worksheet
-    Dim start_date As Date
-
-    Set ws_panel = ThisWorkbook.Worksheets("操作パネル")
-
-    ' --- 日付チェック ---
-    If IsEmpty(ws_panel.Range("C4").Value) Or Not IsDate(ws_panel.Range("C4").Value) Then
-        MsgBox "操作パネルのC4セルに報告対象週の初日（月曜日）を入力してください。", vbExclamation
-        Exit Sub
-    End If
-
-    start_date = CDate(ws_panel.Range("C4").Value)
-
-    If Weekday(start_date, vbMonday) <> 1 Then
-        MsgBox "月曜日の日付を入力してください。" & Chr(10) & _
-               "入力値：" & Format(start_date, "YYYY/M/D") & _
-               "（" & Format(start_date, "AAA") & "）", vbExclamation
-        Exit Sub
-    End If
-
-    ' --- 報告対象週を報告書シートに表示 ---
-    Dim ws_report As Worksheet
-    Set ws_report = ThisWorkbook.Worksheets("報告書")
-    ws_report.Range("C2").Value = _
-        "報告対象週：" & Format(start_date, "M/D（AAA）") & _
-        " 〜 " & Format(start_date + 4, "M/D（AAA）")
-    ws_report.Range("C2").Font.Bold = True
-    ws_report.Range("C2").Font.Italic = False
-    ws_report.Range("C2").Font.Color = RGB(31, 73, 125)
-
-    ' --- 転記設定テーブルを読んでデータ取込 ---
-    Call ImportFromTable
-
-    ' --- 先週比を更新 ---
-    Call UpdateWeeklyComparison
-
-    MsgBox "完了しました！" & Chr(10) & Chr(10) & _
-           "報告対象週：" & Format(start_date, "M/D（AAA）") & _
-           " 〜 " & Format(start_date + 4, "M/D（AAA）"), vbInformation
-
-End Sub
-
-
-' ============================================================
-' 転記設定テーブルを上から順に読んで転記するメイン処理
-' ============================================================
-Sub ImportFromTable()
-
-    Dim ws_panel As Worksheet
-    Set ws_panel = ThisWorkbook.Worksheets(TABLE_SHEET)
-
-    ' テーブルの最終行を取得
-    Dim last_row As Long
-    last_row = ws_panel.Cells(ws_panel.Rows.Count, COL_SRC_KEYWORD).End(xlUp).Row
-
-    ' 開いた外部ファイルをキャッシュ（同じファイルを何度も開かないため）
-    Dim opened_files As Object
-    Set opened_files = CreateObject("Scripting.Dictionary")
-
-    Dim i As Long
-    For i = TABLE_ROW_START To last_row
-
-        Dim kw        As String
-        Dim src_sheet As String
-        Dim src_cell  As String
-        Dim dst_sheet As String
-        Dim dst_cell  As String
-
-        kw        = Trim(CStr(ws_panel.Cells(i, COL_SRC_KEYWORD).Value))
-        src_sheet = Trim(CStr(ws_panel.Cells(i, COL_SRC_SHEET).Value))
-        src_cell  = Trim(CStr(ws_panel.Cells(i, COL_SRC_CELL).Value))
-        dst_sheet = Trim(CStr(ws_panel.Cells(i, COL_DST_SHEET).Value))
-        dst_cell  = Trim(CStr(ws_panel.Cells(i, COL_DST_CELL).Value))
-
-        ' 空行・未入力プレースホルダーはスキップ
-        If kw = "" Or src_cell = "" Then GoTo NextRow
-        If InStr(src_cell, "入力") > 0 Or InStr(src_sheet, "入力") > 0 Then GoTo NextRow
-
-        ' 転記先シートを取得
-        Dim ws_dst As Worksheet
-        On Error Resume Next
-        Set ws_dst = ThisWorkbook.Worksheets(dst_sheet)
-        On Error GoTo 0
-        If ws_dst Is Nothing Then
-            MsgBox "転記先シート「" & dst_sheet & "」が見つかりません。（" & i & "行目）", vbExclamation
-            GoTo NextRow
-        End If
-
-        ' 外部ファイルをキャッシュまたは新規オープン
-        Dim wb_src As Workbook
-        If opened_files.Exists(kw) Then
-            Set wb_src = opened_files(kw)
-        Else
-            Dim found_path As String
-            found_path = FindFileByKeyword(kw, ThisWorkbook.Path)
-
-            If found_path = "" Then
-                MsgBox "「" & kw & "」を含むExcelファイルが見つかりません。" & Chr(10) & _
-                       "報告書と同じフォルダに置いてください。（" & i & "行目）", vbExclamation
-                GoTo NextRow
-            End If
-
-            Application.ScreenUpdating = False
-            Set wb_src = Workbooks.Open(found_path, ReadOnly:=True)
-            opened_files(kw) = wb_src
-        End If
-
-        ' 取込元シートを取得
-        Dim ws_src As Worksheet
-        On Error Resume Next
-        Set ws_src = wb_src.Worksheets(src_sheet)
-        On Error GoTo 0
-        If ws_src Is Nothing Then
-            MsgBox "取込元シート「" & src_sheet & "」が見つかりません。" & Chr(10) & _
-                   "ファイル：" & wb_src.Name & "（" & i & "行目）", vbExclamation
-            GoTo NextRow
-        End If
-
-        ' 値を転記
-        ws_dst.Range(dst_cell).Value = ws_src.Range(src_cell).Value
-
-NextRow:
-        Set ws_src = Nothing
-        Set ws_dst = Nothing
-    Next i
-
-    ' 開いた外部ファイルを全て閉じる
-    Dim key As Variant
-    For Each key In opened_files.Keys
-        opened_files(key).Close SaveChanges:=False
-    Next key
-
-    Application.ScreenUpdating = True
-
-End Sub
-
-
-' ============================================================
-' 同フォルダからキーワードを含むExcelファイルを検索
-' ============================================================
-Function FindFileByKeyword(keyword As String, folder_path As String) As String
-
-    Dim file_name As String
-
-    ' .xlsx を検索
-    file_name = Dir(folder_path & "\*.xlsx")
-    Do While file_name <> ""
-        If InStr(file_name, keyword) > 0 And file_name <> ThisWorkbook.Name Then
-            FindFileByKeyword = folder_path & "\" & file_name
-            Exit Function
-        End If
-        file_name = Dir()
-    Loop
-
-    ' .xlsm も検索
-    file_name = Dir(folder_path & "\*.xlsm")
-    Do While file_name <> ""
-        If InStr(file_name, keyword) > 0 And file_name <> ThisWorkbook.Name Then
-            FindFileByKeyword = folder_path & "\" & file_name
-            Exit Function
-        End If
-        file_name = Dir()
-    Loop
-
-    FindFileByKeyword = ""
-
-End Function
-
-
-' ============================================================
-' 先週比をKPIサマリに反映
-' ============================================================
-Sub UpdateWeeklyComparison()
+' ════════════════════════════════════════════
+' ① CSV 取り込み
+' ════════════════════════════════════════════
+Sub ImportCSV()
+    Dim fPath As String
+    fPath = Application.GetOpenFilename("CSVファイル,*.csv", , "CSVを選択してください")
+    If fPath = "False" Then Exit Sub
 
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets("報告書")
+    Set ws = ThisWorkbook.Sheets(DATA_SHEET)
+    ws.Cells.ClearContents
+    ws.Cells.ClearFormats
 
-    ' 各行番号をラベルから動的に取得
-    Dim r_zentai As Long: r_zentai = FindRowByLabel(ws, "⑤全体対応件数")
-    Dim r_nyuden As Long: r_nyuden = FindRowByLabel(ws, "①入電件数")
-    Dim r_hassin As Long: r_hassin = FindRowByLabel(ws, "④発信件数")
-    Dim r_houki  As Long: r_houki  = FindRowByLabel(ws, "　②放棄呼数")
-    Dim r_stage1 As Long: r_stage1 = FindRowByLabel(ws, "第一段階")
-    Dim r_stage2 As Long: r_stage2 = FindRowByLabel(ws, "第二段階")
+    Dim fileNo As Integer: fileNo = FreeFile
+    Dim buf As String
+    Open fPath For Binary As #fileNo
+    buf = Space(LOF(fileNo))
+    Get #fileNo, , buf
+    Close #fileNo
 
-    ' 第4週(R〜V列)と第3週(M〜Q列)の合計を比較
-    Dim updates(5, 1) As Variant  ' (行番号, 差分)
-    Dim kpi1_cells As Variant
-    kpi1_cells = Array("A9", "D9", "G9", "J9")  ' 全体/入電/発信/放棄呼の先週比セル
-    Dim kpi2_cells As Variant
-    kpi2_cells = Array("E14", "I14")             ' 第一段階/第二段階の先週比セル
-
-    ' KPI1段目
-    Dim rows1 As Variant
-    rows1 = Array(r_zentai, r_nyuden, r_hassin, r_houki)
-    Dim j As Integer
-    For j = 0 To 3
-        If rows1(j) > 0 Then
-            Dim now_val  As Long: now_val  = WorksheetFunction.Sum(ws.Range("R" & rows1(j) & ":V" & rows1(j)))
-            Dim prev_val As Long: prev_val = WorksheetFunction.Sum(ws.Range("M" & rows1(j) & ":Q" & rows1(j)))
-            ws.Range(kpi1_cells(j)).Value = FormatDiff(now_val - prev_val) & "件"
+    Dim inQ As Boolean: inQ = False
+    Dim cleanBuf As String: cleanBuf = ""
+    Dim i As Long
+    For i = 1 To Len(buf)
+        Dim ch As String: ch = Mid(buf, i, 1)
+        If ch = Chr(34) Then inQ = Not inQ
+        If (ch = vbLf Or ch = vbCr) And inQ Then
+            cleanBuf = cleanBuf & " "
+        Else
+            cleanBuf = cleanBuf & ch
         End If
-    Next j
+    Next i
 
-    ' 呼損率の先週比
-    If r_nyuden > 0 And r_houki > 0 Then
-        Dim nyuden_now  As Long: nyuden_now  = WorksheetFunction.Sum(ws.Range("R" & r_nyuden & ":V" & r_nyuden))
-        Dim nyuden_prev As Long: nyuden_prev = WorksheetFunction.Sum(ws.Range("M" & r_nyuden & ":Q" & r_nyuden))
-        Dim houki_now   As Long: houki_now   = WorksheetFunction.Sum(ws.Range("R" & r_houki & ":V" & r_houki))
-        Dim houki_prev  As Long: houki_prev  = WorksheetFunction.Sum(ws.Range("M" & r_houki & ":Q" & r_houki))
-        Dim rate_diff As Double
-        If nyuden_now > 0 And nyuden_prev > 0 Then
-            rate_diff = (houki_now / nyuden_now - houki_prev / nyuden_prev) * 100
-            ws.Range("M9").Value = FormatDiff(Format(rate_diff, "0.0")) & "%"
-        End If
-    End If
+    cleanBuf = Replace(cleanBuf, vbCrLf, vbLf)
+    cleanBuf = Replace(cleanBuf, vbCr, vbLf)
 
-    ' KPI2段目（第一・第二段階）
-    Dim rows2 As Variant
-    rows2 = Array(r_stage1, r_stage2)
-    For j = 0 To 1
-        If rows2(j) > 0 Then
-            Dim s_now  As Long: s_now  = WorksheetFunction.Sum(ws.Range("R" & rows2(j) & ":V" & rows2(j)))
-            Dim s_prev As Long: s_prev = WorksheetFunction.Sum(ws.Range("M" & rows2(j) & ":Q" & rows2(j)))
-            ws.Range(kpi2_cells(j)).Value = FormatDiff(s_now - s_prev) & "件"
-        End If
-    Next j
+    Dim lines() As String
+    lines = Split(cleanBuf, vbLf)
 
+    Dim ln As Long: ln = 1
+    Dim li As Long
+    For li = 0 To UBound(lines)
+        Dim lineStr As String: lineStr = Trim(lines(li))
+        If lineStr = "" Then GoTo NextLine
+        Dim cols() As String
+        cols = SplitCSV(lineStr)
+        Dim j As Integer
+        For j = 0 To UBound(cols)
+            ws.Cells(ln, j + 1).NumberFormat = "@"
+            ws.Cells(ln, j + 1).Value = Trim(cols(j))
+        Next j
+        ln = ln + 1
+NextLine:
+    Next li
+
+    With ws.Rows(1)
+        .Font.Bold = True
+        .Font.Name = "Meiryo UI"
+        .Font.Color = RGB(255, 255, 255)
+        .Interior.Color = RGB(31, 56, 100)
+        .HorizontalAlignment = xlCenter
+        .RowHeight = 28
+    End With
+    ws.Rows(1).AutoFilter
+    ws.Columns("A:W").AutoFit
+    MsgBox "CSV取り込み完了！  " & (ln - 2) & " 件", vbInformation
 End Sub
 
-
-' ============================================================
-' 差分を「先週比：▲N」「先週比：▼N」形式にフォーマット
-' ============================================================
-Function FormatDiff(diff As Variant) As String
-    Dim n As Double
-    n = CDbl(diff)
-    If n > 0 Then
-        FormatDiff = "先週比：▲" & diff
-    ElseIf n < 0 Then
-        FormatDiff = "先週比：▼" & Abs(diff)
-    Else
-        FormatDiff = "先週比：±0"
-    End If
-End Function
-
-
-' ============================================================
-' 報告書シートのA列からラベルを検索して行番号を返す
-' ============================================================
-Function FindRowByLabel(ws As Worksheet, label As String) As Long
-    Dim r As Long
-    For r = 1 To 200
-        If InStr(CStr(ws.Cells(r, 1).Value), label) > 0 Then
-            FindRowByLabel = r
-            Exit Function
+Function SplitCSV(s As String) As String()
+    Dim result() As String
+    ReDim result(0)
+    Dim idx  As Integer: idx  = 0
+    Dim inQ  As Boolean: inQ  = False
+    Dim cur  As String:  cur  = ""
+    Dim pos  As Long
+    For pos = 1 To Len(s)
+        Dim c As String: c = Mid(s, pos, 1)
+        If c = Chr(34) Then
+            If inQ And Mid(s, pos + 1, 1) = Chr(34) Then
+                cur = cur & Chr(34)
+                pos = pos + 1
+            Else
+                inQ = Not inQ
+            End If
+        ElseIf c = "," And Not inQ Then
+            result(idx) = cur
+            cur = ""
+            idx = idx + 1
+            ReDim Preserve result(idx)
+        Else
+            cur = cur & c
         End If
-    Next r
-    FindRowByLabel = 0
+    Next pos
+    result(idx) = cur
+    SplitCSV = result
 End Function
 
+' ════════════════════════════════════════════
+' データクリア
+' ════════════════════════════════════════════
+Sub ClearData()
+    Dim ans As Integer
+    ans = MsgBox("データシートのデータをすべて削除します。" & vbCrLf & "よろしいですか？", vbYesNo + vbExclamation, "確認")
+    If ans <> vbYes Then Exit Sub
 
-' ============================================================
-' ② 提出用に整える（操作パネル・作業データ削除）
-' ============================================================
-Sub PrepareForSubmission()
+    Dim ws As Worksheet: Set ws = ThisWorkbook.Sheets(DATA_SHEET)
+    Dim lastRow As Long: lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then
+        MsgBox "削除するデータがありません。", vbInformation
+        Exit Sub
+    End If
+    ws.Rows("2:" & lastRow).ClearContents
+    ws.Rows("2:" & lastRow).ClearFormats
+    MsgBox "データをクリアしました。", vbInformation
+End Sub
 
-    Dim answer As Integer
-    answer = MsgBox( _
-        "操作パネルと作業データシートを削除して提出用ファイルにします。" & Chr(10) & _
-        "この操作は元に戻せません。よろしいですか？", _
-        vbYesNo + vbExclamation, "提出用に整える")
+' ════════════════════════════════════════════
+' 全シート更新
+' 操作パネルC12に報告対象週の月曜日を入力
+' ════════════════════════════════════════════
+Sub UpdateAllSheets()
+    Dim pws As Worksheet: Set pws = ThisWorkbook.Sheets(PANEL_SHEET)
+    Dim thisMonday As Date
 
-    If answer = vbNo Then Exit Sub
+    On Error GoTo NoPeriod
+    thisMonday = CDate(pws.Cells(12, 3).Value)
+    On Error GoTo 0
 
-    Application.DisplayAlerts = False
+    ' 月曜日かチェック
+    If Weekday(thisMonday, vbMonday) <> 1 Then
+        MsgBox "月曜日の日付を入力してください。" & vbCrLf & _
+               "入力値：" & Format(thisMonday, "yyyy/m/d") & "（" & WeekdayName(Weekday(thisMonday), False, vbMonday) & "）", vbExclamation
+        Exit Sub
+    End If
 
-    Dim nm As Variant
-    For Each nm In Array("操作パネル", "作業データ")
-        On Error Resume Next
-        ThisWorkbook.Worksheets(nm).Delete
-        On Error GoTo 0
-    Next nm
+    ' 4週間分の期間を計算
+    Dim dtStart As Date: dtStart = thisMonday - 21  ' 4週前の月曜日
+    Dim dtEnd   As Date: dtEnd   = thisMonday + 6   ' 今週の日曜日
+    Dim lastMonday As Date: lastMonday = thisMonday - 7
+    Dim thisSunday As Date: thisSunday = thisMonday + 6
+    Dim lastSunday As Date: lastSunday = lastMonday + 6
 
-    Application.DisplayAlerts = True
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
 
-    ThisWorkbook.Worksheets("報告書").Activate
-    ThisWorkbook.Save
+    Call BuildHistorySheet(dtStart, dtEnd)
+    Call BuildCatDetailSheet(dtStart, dtEnd)
+    Call BuildCatWeekSheet(thisMonday, lastMonday, thisSunday, lastSunday)
+    Call BuildBureauSheet(thisMonday, thisSunday)
+    Call BuildStaffSheet(thisMonday, thisSunday)
 
-    MsgBox "完了しました。提出用ファイルの準備ができました。", vbInformation
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    MsgBox "全シート更新完了！" & vbCrLf & _
+           "報告対象週：" & Format(thisMonday, "yyyy/m/d") & " ～ " & Format(thisSunday, "yyyy/m/d") & vbCrLf & _
+           "集計範囲：" & Format(dtStart, "yyyy/m/d") & " ～ " & Format(dtEnd, "yyyy/m/d"), vbInformation
+    Exit Sub
 
+NoPeriod:
+    On Error GoTo 0
+    MsgBox "操作パネルに報告対象週の月曜日を入力してください。", vbExclamation
+End Sub
+
+' ════════════════════════════════════════════
+' 共通ヘルパー
+' ════════════════════════════════════════════
+Function ColIdx(ws As Worksheet, hdr As String) As Long
+    Dim c As Range
+    For Each c In ws.Rows(1).Cells
+        If Trim(c.Value) = hdr Then ColIdx = c.Column: Exit Function
+    Next c
+    ColIdx = 0
+End Function
+
+Function ToDate(v As Variant) As Date
+    On Error GoTo bad
+    Dim s As String: s = Trim(CStr(v))
+    If s = "" Or s = "Empty" Then GoTo bad
+    If InStr(s, " ") > 0 Then s = Left(s, InStr(s, " ") - 1)
+    ToDate = CDate(s)
+    Exit Function
+bad:
+    ToDate = CDate("1900/1/1")
+End Function
+
+Function IsValidDate(v As Variant) As Boolean
+    IsValidDate = (ToDate(v) <> CDate("1900/1/1"))
+End Function
+
+Function DateLabel(d As Date) As String
+    DateLabel = Month(d) & "/" & Day(d)
+End Function
+
+Function WeekMon(d As Date) As Date
+    WeekMon = d - (Weekday(d, vbMonday) - 1)
+End Function
+
+Sub GetBigSmall(cv As String, big As String, small As String)
+    Dim pos As Long
+    pos = InStr(cv, ChrW(12288))
+    If pos > 0 Then
+        big   = Trim(Left(cv, pos - 1))
+        small = Trim(Mid(cv, pos + 1))
+    ElseIf InStr(cv, " ") > 0 Then
+        pos   = InStr(cv, " ")
+        big   = Trim(Left(cv, pos - 1))
+        small = Trim(Mid(cv, pos + 1))
+    Else
+        big   = Trim(cv)
+        small = "（その他）"
+    End If
+End Sub
+
+Sub StyleHeader(ws As Worksheet, r As Long, lastC As Long)
+    With ws.Range(ws.Cells(r, 1), ws.Cells(r, lastC))
+        .Font.Bold = True: .Font.Name = "Meiryo UI": .Font.Size = 10
+        .Font.Color = RGB(255, 255, 255)
+        .Interior.Color = RGB(31, 56, 100)
+        .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
+        .WrapText = True: .RowHeight = 28
+        .Borders.LineStyle = xlContinuous
+        .Borders.Color = RGB(189, 215, 238)
+    End With
+End Sub
+
+Sub StyleData(ws As Worksheet, r1 As Long, r2 As Long, c1 As Long, c2 As Long)
+    Dim r As Long
+    For r = r1 To r2
+        With ws.Range(ws.Cells(r, c1), ws.Cells(r, c2))
+            .Interior.Color = IIf(r Mod 2 = 0, RGB(235, 242, 250), RGB(255, 255, 255))
+            .Font.Name = "Meiryo UI": .Font.Size = 10
+            .VerticalAlignment = xlCenter
+            .Borders.LineStyle = xlContinuous
+            .Borders.Color = RGB(189, 215, 238)
+        End With
+    Next r
+End Sub
+
+Sub StyleTotal(ws As Worksheet, r As Long, c1 As Long, c2 As Long)
+    With ws.Range(ws.Cells(r, c1), ws.Cells(r, c2))
+        .Font.Bold = True: .Font.Name = "Meiryo UI"
+        .Interior.Color = RGB(31, 56, 100)
+        .Font.Color = RGB(255, 255, 255)
+        .Borders.LineStyle = xlContinuous
+        .Borders.Color = RGB(100, 100, 100)
+    End With
+End Sub
+
+Sub StyleTitle(ws As Worksheet, title As String, dtS As Date, dtE As Date)
+    ws.Cells(1, 1).Value = title & "　（" & Format(dtS, "yyyy/m/d") & " ～ " & Format(dtE, "yyyy/m/d") & "）"
+    With ws.Cells(1, 1).Font
+        .Bold = True: .Size = 12: .Name = "Meiryo UI": .Color = RGB(31, 56, 100)
+    End With
+    ws.Rows(1).RowHeight = 24
+End Sub
+
+Sub AutoFitSheet(ws As Worksheet)
+    ws.Columns.AutoFit
+    Dim c As Range
+    For Each c In ws.UsedRange.Columns
+        If c.ColumnWidth > 20 Then c.ColumnWidth = 20
+        If c.ColumnWidth < 5  Then c.ColumnWidth = 5
+    Next c
+    ws.Columns(1).ColumnWidth = 20
+End Sub
+
+Sub ColorDiff(c As Range, df As Long)
+    If df >= 5 Then
+        c.Interior.Color = RGB(198, 239, 206)
+        c.Font.Color = RGB(0, 97, 0)
+        c.Font.Bold = True
+    ElseIf df <= -5 Then
+        c.Interior.Color = RGB(255, 199, 206)
+        c.Font.Color = RGB(156, 0, 6)
+        c.Font.Bold = True
+    Else
+        c.Interior.Color = RGB(255, 235, 156)
+        c.Font.Color = RGB(156, 87, 0)
+    End If
+    c.NumberFormat = "@"
+    If df > 0 Then
+        c.Value = "↑" & CStr(df)
+    ElseIf df < 0 Then
+        c.Value = "↓" & CStr(Abs(df))
+    Else
+        c.Value = "0"
+    End If
+End Sub
+
+' ════════════════════════════════════════════
+' ③ 新規履歴件数（4週間分・日ごと）
+' ════════════════════════════════════════════
+Sub BuildHistorySheet(dtS As Date, dtE As Date)
+    Dim ws  As Worksheet: Set ws  = ThisWorkbook.Sheets(S_HISTORY)
+    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
+    ws.Cells.Clear
+    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Sub
+
+    Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
+    If colD = 0 Then Exit Sub
+
+    Dim dc        As Object: Set dc        = CreateObject("Scripting.Dictionary")
+    Dim dateOrder As New Collection
+    Dim r As Long
+    For r = 2 To lastRow
+        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip1
+        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
+        If d < dtS Or d > dtE Then GoTo Skip1
+        Dim lbl As String: lbl = DateLabel(d)
+        If Not dc.Exists(lbl) Then
+            dc.Add lbl, 1: dateOrder.Add lbl
+        Else
+            dc(lbl) = dc(lbl) + 1
+        End If
+Skip1:
+    Next r
+
+    StyleTitle ws, "新規履歴件数", dtS, dtE
+    ws.Cells(2, 1).Value = "区分"
+    Dim col As Long: col = 2
+    Dim k As Variant
+    For Each k In dateOrder
+        ws.Cells(2, col).Value = k: col = col + 1
+    Next k
+    Dim tcol As Long: tcol = col
+    ws.Cells(2, tcol).Value = "合計"
+    StyleHeader ws, 2, tcol
+
+    ws.Cells(3, 1).Value = "件数"
+    col = 2
+    For Each k In dateOrder
+        ws.Cells(3, col).Value = dc(k): col = col + 1
+    Next k
+    ws.Cells(3, tcol).Value = "=SUM(" & ws.Cells(3, 2).Address(False, False) & ":" & ws.Cells(3, tcol - 1).Address(False, False) & ")"
+    StyleData ws, 3, 3, 1, tcol
+    With ws.Cells(3, 1)
+        .Interior.Color = RGB(214, 228, 247): .Font.Bold = True: .HorizontalAlignment = xlCenter
+    End With
+    AutoFitSheet ws
+End Sub
+
+' ════════════════════════════════════════════
+' ④ カテゴリー別詳細（4週間分・日ごと）
+' ════════════════════════════════════════════
+Sub BuildCatDetailSheet(dtS As Date, dtE As Date)
+    Dim ws  As Worksheet: Set ws  = ThisWorkbook.Sheets(S_CAT_DTL)
+    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
+    Dim pws As Worksheet: Set pws = ThisWorkbook.Sheets(PANEL_SHEET)
+    ws.Cells.Clear
+    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Sub
+
+    Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
+    Dim colC As Long: colC = ColIdx(dws, "業務分類詳細")
+    Dim colT As Long: colT = ColIdx(dws, "業務チーム")
+    If colD = 0 Or colC = 0 Or colT = 0 Then Exit Sub
+
+    Dim sortOrder As New Collection
+    Dim sortSet   As Object: Set sortSet = CreateObject("Scripting.Dictionary")
+    Dim pr As Long: pr = 23
+    Do While Trim(CStr(pws.Cells(pr, 2).Value)) <> ""
+        Dim sTeam As String: sTeam = Trim(CStr(pws.Cells(pr, 3).Value))
+        Dim sCat  As String: sCat  = Trim(CStr(pws.Cells(pr, 4).Value))
+        If sTeam <> "" And sCat <> "" Then
+            Dim sbig As String, ssmall As String
+            GetBigSmall sCat, sbig, ssmall
+            Dim sKey As String: sKey = sTeam & ChrW(9) & sbig & ChrW(9) & ssmall
+            If Not sortSet.Exists(sKey) Then
+                sortOrder.Add sKey: sortSet.Add sKey, True
+            End If
+        End If
+        pr = pr + 1
+    Loop
+
+    Dim counts    As Object: Set counts   = CreateObject("Scripting.Dictionary")
+    Dim rowOrder  As New Collection
+    Dim rowSet    As Object: Set rowSet   = CreateObject("Scripting.Dictionary")
+    Dim dateOrder As New Collection
+    Dim dateSet   As Object: Set dateSet  = CreateObject("Scripting.Dictionary")
+
+    Dim r As Long
+    For r = 2 To lastRow
+        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip2
+        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
+        If d < dtS Or d > dtE Then GoTo Skip2
+        Dim lbl  As String: lbl  = DateLabel(d)
+        Dim cv   As String: cv   = Trim(CStr(dws.Cells(r, colC).Value))
+        Dim team As String: team = Trim(CStr(dws.Cells(r, colT).Value))
+        If cv = "" Or cv = "Empty" Then GoTo Skip2
+        If team = "" Or team = "Empty" Then team = "（未設定）"
+
+        Dim big As String, small As String
+        GetBigSmall cv, big, small
+
+        Dim rowKey  As String: rowKey  = team & ChrW(9) & big & ChrW(9) & small
+        Dim fullKey As String: fullKey = rowKey & ChrW(9) & lbl
+
+        If Not rowSet.Exists(rowKey) Then rowSet.Add rowKey, True: rowOrder.Add rowKey
+        If Not dateSet.Exists(lbl)   Then dateSet.Add lbl, True:   dateOrder.Add lbl
+        counts(fullKey) = IIf(counts.Exists(fullKey), counts(fullKey) + 1, 1)
+Skip2:
+    Next r
+
+    Dim sortedOrder As New Collection
+    Dim addedSet    As Object: Set addedSet = CreateObject("Scripting.Dictionary")
+
+    Dim so As Variant
+    For Each so In sortOrder
+        If Not addedSet.Exists(so) Then
+            sortedOrder.Add so: addedSet.Add so, True
+        End If
+    Next so
+    Dim rk As Variant
+    For Each rk In rowOrder
+        If Not addedSet.Exists(rk) Then
+            sortedOrder.Add rk: addedSet.Add rk, True
+        End If
+    Next rk
+
+    StyleTitle ws, "カテゴリー別詳細", dtS, dtE
+    ws.Cells(2, 1).Value = "業務チーム"
+    ws.Cells(2, 2).Value = "大分類"
+    ws.Cells(2, 3).Value = "小分類"
+    Dim col As Long: col = 4
+    Dim dk As Variant
+    For Each dk In dateOrder
+        ws.Cells(2, col).Value = dk: col = col + 1
+    Next dk
+    Dim tcol As Long: tcol = col
+    ws.Cells(2, tcol).Value = "合計"
+    StyleHeader ws, 2, tcol
+
+    Dim rOut     As Long:   rOut     = 3
+    Dim prevTeam As String: prevTeam = ""
+    Dim prevBig  As String: prevBig  = ""
+    Dim sk As Variant
+    For Each sk In sortedOrder
+        Dim pp() As String: pp = Split(CStr(sk), ChrW(9))
+        If pp(0) <> prevTeam Then
+            ws.Cells(rOut, 1).Value = pp(0): prevTeam = pp(0): prevBig = ""
+        End If
+        If pp(1) <> prevBig Then
+            ws.Cells(rOut, 2).Value = pp(1): prevBig = pp(1)
+        End If
+        ws.Cells(rOut, 3).Value = pp(2)
+        col = 4
+        For Each dk In dateOrder
+            Dim fk As String: fk = CStr(sk) & ChrW(9) & dk
+            ws.Cells(rOut, col).Value = IIf(counts.Exists(fk), counts(fk), 0)
+            col = col + 1
+        Next dk
+        ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 4).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+        rOut = rOut + 1
+    Next sk
+
+    ws.Cells(rOut, 1).Value = "合計"
+    col = 4
+    For Each dk In dateOrder
+        ws.Cells(rOut, col).Value = "=SUM(" & ws.Cells(3, col).Address(False, False) & ":" & ws.Cells(rOut - 1, col).Address(False, False) & ")"
+        col = col + 1
+    Next dk
+    ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 4).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+    StyleData ws, 3, rOut - 1, 1, tcol
+    StyleTotal ws, rOut, 1, tcol
+
+    Dim rr As Long
+    For rr = 3 To rOut - 1
+        If Trim(ws.Cells(rr, 1).Value) <> "" Then
+            ws.Cells(rr, 1).Interior.Color = RGB(214, 228, 247)
+            ws.Cells(rr, 1).Font.Bold = True
+        End If
+        If Trim(ws.Cells(rr, 2).Value) <> "" Then
+            ws.Cells(rr, 2).Font.Bold = True
+        End If
+    Next rr
+
+    Dim msT As Long: msT = 3
+    Dim cbT As String: cbT = ws.Cells(3, 1).Value
+    For rr = 4 To rOut
+        Dim cv1 As String: cv1 = Trim(ws.Cells(rr, 1).Value)
+        If cv1 <> "" And cv1 <> cbT Then
+            If rr - 1 > msT Then
+                ws.Range(ws.Cells(msT, 1), ws.Cells(rr - 1, 1)).Merge
+                ws.Cells(msT, 1).VerticalAlignment = xlCenter
+                ws.Cells(msT, 1).HorizontalAlignment = xlCenter
+            End If
+            msT = rr: cbT = cv1
+        End If
+    Next rr
+
+    Dim msB As Long: msB = 3
+    Dim cbB As String: cbB = ws.Cells(3, 1).Value & ChrW(9) & ws.Cells(3, 2).Value
+    For rr = 4 To rOut
+        Dim curKey As String
+        curKey = Trim(ws.Cells(rr, 1).Value) & ChrW(9) & Trim(ws.Cells(rr, 2).Value)
+        If Trim(ws.Cells(rr, 2).Value) <> "" And curKey <> cbB Then
+            If rr - 1 > msB Then
+                ws.Range(ws.Cells(msB, 2), ws.Cells(rr - 1, 2)).Merge
+                ws.Cells(msB, 2).VerticalAlignment = xlCenter
+                ws.Cells(msB, 2).HorizontalAlignment = xlCenter
+            End If
+            msB = rr: cbB = curKey
+        End If
+    Next rr
+
+    AutoFitSheet ws
+    ws.Columns(1).ColumnWidth = 22
+    ws.Columns(2).ColumnWidth = 18
+    ws.Columns(3).ColumnWidth = 18
+End Sub
+
+' ════════════════════════════════════════════
+' ⑤ カテゴリー別（週比較）今週・先週のみ
+' ════════════════════════════════════════════
+Sub BuildCatWeekSheet(thisMonday As Date, lastMonday As Date, thisSunday As Date, lastSunday As Date)
+    Dim ws  As Worksheet: Set ws  = ThisWorkbook.Sheets(S_CAT_WEEK)
+    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
+    Dim pws As Worksheet: Set pws = ThisWorkbook.Sheets(PANEL_SHEET)
+    ws.Cells.Clear
+    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Sub
+
+    Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
+    Dim colC As Long: colC = ColIdx(dws, "業務分類詳細")
+    Dim colT As Long: colT = ColIdx(dws, "業務チーム")
+    If colD = 0 Or colC = 0 Or colT = 0 Then Exit Sub
+
+    ' 操作パネルE23以降: C列+D列大分類 → E列表示名称にマッピング
+    Dim labelMap  As Object: Set labelMap  = CreateObject("Scripting.Dictionary")
+    Dim sortOrder As New Collection
+    Dim sortSet   As Object: Set sortSet   = CreateObject("Scripting.Dictionary")
+    Dim pr As Long: pr = 23
+    Do While Trim(CStr(pws.Cells(pr, 5).Value)) <> ""
+        Dim sLabel As String: sLabel = Trim(CStr(pws.Cells(pr, 5).Value))
+        Dim sCat   As String: sCat   = Trim(CStr(pws.Cells(pr, 4).Value))
+        Dim sTeam  As String: sTeam  = Trim(CStr(pws.Cells(pr, 3).Value))
+        If sLabel <> "" And sCat <> "" Then
+            Dim sbig As String, ssmall As String
+            GetBigSmall sCat, sbig, ssmall
+            Dim mapKey As String: mapKey = sTeam & ChrW(9) & sbig
+            If Not labelMap.Exists(mapKey) Then labelMap.Add mapKey, sLabel
+            If Not sortSet.Exists(sLabel) Then
+                sortOrder.Add sLabel: sortSet.Add sLabel, True
+            End If
+        End If
+        pr = pr + 1
+    Loop
+
+    Dim thisCnt  As Object: Set thisCnt  = CreateObject("Scripting.Dictionary")
+    Dim lastCnt  As Object: Set lastCnt  = CreateObject("Scripting.Dictionary")
+    Dim bigOrder As New Collection
+    Dim bigSet   As Object: Set bigSet   = CreateObject("Scripting.Dictionary")
+
+    Dim r As Long
+    For r = 2 To lastRow
+        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip5
+        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
+        Dim cv   As String: cv   = Trim(CStr(dws.Cells(r, colC).Value))
+        Dim team As String: team = Trim(CStr(dws.Cells(r, colT).Value))
+        If cv = "" Or cv = "Empty" Then GoTo Skip5
+        If team = "" Or team = "Empty" Then team = "（未設定）"
+
+        Dim big As String, small As String
+        GetBigSmall cv, big, small
+        Dim mKey As String: mKey = team & ChrW(9) & big
+        Dim dispName As String
+        dispName = IIf(labelMap.Exists(mKey), labelMap(mKey), big)
+
+        If Not bigSet.Exists(dispName) Then bigSet.Add dispName, True: bigOrder.Add dispName
+        If d >= thisMonday And d <= thisSunday Then
+            thisCnt(dispName) = IIf(thisCnt.Exists(dispName), thisCnt(dispName) + 1, 1)
+        End If
+        If d >= lastMonday And d <= lastSunday Then
+            lastCnt(dispName) = IIf(lastCnt.Exists(dispName), lastCnt(dispName) + 1, 1)
+        End If
+Skip5:
+    Next r
+
+    Dim sortedBig As New Collection
+    Dim addedSet  As Object: Set addedSet = CreateObject("Scripting.Dictionary")
+
+    Dim so As Variant
+    For Each so In sortOrder
+        If Not addedSet.Exists(so) Then
+            sortedBig.Add so: addedSet.Add so, True
+        End If
+    Next so
+    Dim bk2 As Variant
+    For Each bk2 In bigOrder
+        If Not addedSet.Exists(bk2) Then
+            sortedBig.Add bk2: addedSet.Add bk2, True
+        End If
+    Next bk2
+
+    ws.Cells(1, 1).Value = "カテゴリー別（週比較）　今週：" & Format(thisMonday, "yyyy/m/d") & " ～ " & Format(thisSunday, "yyyy/m/d") & "　先週：" & Format(lastMonday, "yyyy/m/d") & " ～ " & Format(lastSunday, "yyyy/m/d")
+    With ws.Cells(1, 1).Font
+        .Bold = True: .Size = 12: .Name = "Meiryo UI": .Color = RGB(31, 56, 100)
+    End With
+    ws.Rows(1).RowHeight = 24
+
+    Dim thisLbl As String: thisLbl = "今週（" & Month(thisMonday) & "/" & Day(thisMonday) & "～" & Month(thisSunday) & "/" & Day(thisSunday) & "）"
+    Dim lastLbl As String: lastLbl = "先週（" & Month(lastMonday) & "/" & Day(lastMonday) & "～" & Month(lastSunday) & "/" & Day(lastSunday) & "）"
+
+    ws.Cells(2, 1).Value = "分類"
+    ws.Cells(2, 2).Value = thisLbl
+    ws.Cells(2, 3).Value = lastLbl
+    ws.Cells(2, 4).Value = "差分"
+    StyleHeader ws, 2, 4
+    ws.Rows(2).RowHeight = 36
+
+    Dim rOut As Long: rOut = 3
+    Dim bk As Variant
+    For Each bk In sortedBig
+        Dim tc As Long: tc = IIf(thisCnt.Exists(bk), thisCnt(bk), 0)
+        Dim lc As Long: lc = IIf(lastCnt.Exists(bk), lastCnt(bk), 0)
+        Dim df As Long: df = tc - lc
+        ws.Cells(rOut, 1).Value = bk
+        ws.Cells(rOut, 2).Value = tc
+        ws.Cells(rOut, 3).Value = lc
+        ColorDiff ws.Cells(rOut, 4), df
+        rOut = rOut + 1
+    Next bk
+
+    ws.Cells(rOut, 1).Value = "合計"
+    ws.Cells(rOut, 2).Value = "=SUM(" & ws.Cells(3, 2).Address(False, False) & ":" & ws.Cells(rOut - 1, 2).Address(False, False) & ")"
+    ws.Cells(rOut, 3).Value = "=SUM(" & ws.Cells(3, 3).Address(False, False) & ":" & ws.Cells(rOut - 1, 3).Address(False, False) & ")"
+    ws.Cells(rOut, 4).Value = ""
+    StyleData ws, 3, rOut - 1, 1, 4
+    StyleTotal ws, rOut, 1, 4
+
+    rOut = rOut + 2
+    ws.Cells(rOut, 1).Value = "【差分】↑=増加　↓=減少　色：緑=+5以上　黄=±4以内　赤=-5以下"
+    With ws.Cells(rOut, 1).Font
+        .Name = "Meiryo UI": .Size = 9: .Color = RGB(100, 100, 100): .Italic = True
+    End With
+
+    AutoFitSheet ws
+    ws.Columns(1).ColumnWidth = 24
+    ws.Columns(2).ColumnWidth = 22
+    ws.Columns(3).ColumnWidth = 22
+    ws.Columns(4).ColumnWidth = 12
+End Sub
+
+' ════════════════════════════════════════════
+' ⑥ 問い合わせの多い区局（今週分のみ）
+' ════════════════════════════════════════════
+Sub BuildBureauSheet(dtS As Date, dtE As Date)
+    Dim ws  As Worksheet: Set ws  = ThisWorkbook.Sheets(S_BUREAU)
+    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
+    ws.Cells.Clear
+    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Sub
+
+    Dim colD As Long: colD = ColIdx(dws, "初回受付日時")
+    Dim colB As Long: colB = ColIdx(dws, "所属（局）")
+    If colD = 0 Or colB = 0 Then Exit Sub
+
+    Dim counts    As Object: Set counts  = CreateObject("Scripting.Dictionary")
+    Dim burTot    As Object: Set burTot  = CreateObject("Scripting.Dictionary")
+    Dim dateOrder As New Collection
+    Dim dateSet   As Object: Set dateSet = CreateObject("Scripting.Dictionary")
+
+    Dim r As Long
+    For r = 2 To lastRow
+        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip6
+        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
+        If d < dtS Or d > dtE Then GoTo Skip6
+        Dim lbl As String: lbl = DateLabel(d)
+        Dim bv As String: bv = Trim(CStr(dws.Cells(r, colB).Value))
+        If bv = "" Or bv = "Empty" Then GoTo Skip6
+        If Not dateSet.Exists(lbl) Then dateSet.Add lbl, True: dateOrder.Add lbl
+        burTot(bv) = IIf(burTot.Exists(bv), burTot(bv) + 1, 1)
+        Dim kk As String: kk = bv & ChrW(9) & lbl
+        counts(kk) = IIf(counts.Exists(kk), counts(kk) + 1, 1)
+Skip6:
+    Next r
+
+    StyleTitle ws, "問い合わせの多い区局（今週）", dtS, dtE
+    ws.Cells(2, 1).Value = "区局名"
+    Dim col As Long: col = 2
+    Dim dk As Variant
+    For Each dk In dateOrder
+        ws.Cells(2, col).Value = dk: col = col + 1
+    Next dk
+    Dim tcol As Long: tcol = col
+    ws.Cells(2, tcol).Value = "合計"
+    StyleHeader ws, 2, tcol
+
+    Dim bKeys()   As String: ReDim bKeys(burTot.Count - 1)
+    Dim bTotals() As Long:   ReDim bTotals(burTot.Count - 1)
+    Dim bi As Long: bi = 0
+    Dim bk As Variant
+    For Each bk In burTot.Keys
+        bKeys(bi) = bk: bTotals(bi) = burTot(bk): bi = bi + 1
+    Next bk
+    Dim i As Long, j As Long
+    For i = 0 To UBound(bKeys) - 1
+        For j = i + 1 To UBound(bKeys)
+            If bTotals(j) > bTotals(i) Then
+                Dim ts As String: ts = bKeys(i): bKeys(i) = bKeys(j): bKeys(j) = ts
+                Dim tl As Long:   tl = bTotals(i): bTotals(i) = bTotals(j): bTotals(j) = tl
+            End If
+        Next j
+    Next i
+
+    Dim rOut As Long: rOut = 3
+    For bi = 0 To UBound(bKeys)
+        ws.Cells(rOut, 1).Value = bKeys(bi)
+        col = 2
+        For Each dk In dateOrder
+            Dim kk2 As String: kk2 = bKeys(bi) & ChrW(9) & dk
+            ws.Cells(rOut, col).Value = IIf(counts.Exists(kk2), counts(kk2), 0)
+            col = col + 1
+        Next dk
+        ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 2).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+        rOut = rOut + 1
+    Next bi
+
+    ws.Cells(rOut, 1).Value = "合計"
+    col = 2
+    For Each dk In dateOrder
+        ws.Cells(rOut, col).Value = "=SUM(" & ws.Cells(3, col).Address(False, False) & ":" & ws.Cells(rOut - 1, col).Address(False, False) & ")"
+        col = col + 1
+    Next dk
+    ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 2).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+    StyleData ws, 3, rOut - 1, 1, tcol
+    StyleTotal ws, rOut, 1, tcol
+    AutoFitSheet ws
+End Sub
+
+' ════════════════════════════════════════════
+' ⑦ 受付担当者別対応件数（今週分のみ）
+' ════════════════════════════════════════════
+Sub BuildStaffSheet(dtS As Date, dtE As Date)
+    Dim ws  As Worksheet: Set ws  = ThisWorkbook.Sheets(S_STAFF)
+    Dim dws As Worksheet: Set dws = ThisWorkbook.Sheets(DATA_SHEET)
+    ws.Cells.Clear
+    Dim lastRow As Long: lastRow = dws.Cells(dws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Sub
+
+    Dim colD  As Long: colD = ColIdx(dws, "初回受付日時")
+    Dim sCols(1 To 5) As Long
+    sCols(1) = ColIdx(dws, "受付担当①"): sCols(2) = ColIdx(dws, "受付担当②")
+    sCols(3) = ColIdx(dws, "受付担当③"): sCols(4) = ColIdx(dws, "受付担当④")
+    sCols(5) = ColIdx(dws, "受付担当⑤")
+    If colD = 0 Or sCols(1) = 0 Then Exit Sub
+
+    Dim counts     As Object: Set counts     = CreateObject("Scripting.Dictionary")
+    Dim numCnts    As Object: Set numCnts    = CreateObject("Scripting.Dictionary")
+    Dim staffOrder As New Collection
+    Dim staffSet   As Object: Set staffSet   = CreateObject("Scripting.Dictionary")
+    Dim dateOrder  As New Collection
+    Dim dateSet    As Object: Set dateSet    = CreateObject("Scripting.Dictionary")
+
+    Dim r As Long, sn As Long
+    For r = 2 To lastRow
+        If Not IsValidDate(dws.Cells(r, colD).Value) Then GoTo Skip7
+        Dim d As Date: d = ToDate(dws.Cells(r, colD).Value)
+        If d < dtS Or d > dtE Then GoTo Skip7
+        Dim lbl As String: lbl = DateLabel(d)
+        If Not dateSet.Exists(lbl) Then dateSet.Add lbl, True: dateOrder.Add lbl
+        For sn = 1 To 5
+            If sCols(sn) = 0 Then GoTo NextSN
+            Dim sv As String: sv = Trim(CStr(dws.Cells(r, sCols(sn)).Value))
+            If sv = "" Or sv = "Empty" Then GoTo NextSN
+            If Not staffSet.Exists(sv) Then staffSet.Add sv, True: staffOrder.Add sv
+            Dim kk As String: kk = sv & ChrW(9) & lbl
+            counts(kk) = IIf(counts.Exists(kk), counts(kk) + 1, 1)
+            Dim knk As String: knk = sv & ChrW(9) & CStr(sn)
+            numCnts(knk) = IIf(numCnts.Exists(knk), numCnts(knk) + 1, 1)
+NextSN:
+        Next sn
+Skip7:
+    Next r
+
+    StyleTitle ws, "受付担当者別対応件数（今週）", dtS, dtE
+    ws.Cells(2, 1).Value = "担当者名"
+    ws.Cells(2, 2).Value = "①担当"
+    ws.Cells(2, 3).Value = "②担当"
+    ws.Cells(2, 4).Value = "③担当"
+    ws.Cells(2, 5).Value = "④担当"
+    ws.Cells(2, 6).Value = "⑤担当"
+
+    Dim col As Long: col = 7
+    Dim dk As Variant
+    For Each dk In dateOrder
+        ws.Cells(2, col).Value = dk: col = col + 1
+    Next dk
+    Dim tcol As Long: tcol = col
+    ws.Cells(2, tcol).Value = "合計"
+    StyleHeader ws, 2, tcol
+
+    Dim numColors(1 To 5) As Long
+    numColors(1) = RGB(31, 56, 100):  numColors(2) = RGB(46, 117, 182)
+    numColors(3) = RGB(68, 144, 196): numColors(4) = RGB(100, 162, 206)
+    numColors(5) = RGB(144, 186, 220)
+    Dim si As Long
+    For si = 1 To 5
+        ws.Cells(2, si + 1).Interior.Color = numColors(si)
+    Next si
+
+    Dim rOut As Long: rOut = 3
+    Dim sk As Variant
+    For Each sk In staffOrder
+        ws.Cells(rOut, 1).Value = sk
+        For si = 1 To 5
+            Dim knk2 As String: knk2 = sk & ChrW(9) & CStr(si)
+            ws.Cells(rOut, si + 1).Value = IIf(numCnts.Exists(knk2), numCnts(knk2), 0)
+        Next si
+        col = 7
+        For Each dk In dateOrder
+            Dim kk2 As String: kk2 = sk & ChrW(9) & dk
+            ws.Cells(rOut, col).Value = IIf(counts.Exists(kk2), counts(kk2), 0)
+            col = col + 1
+        Next dk
+        ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 7).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+        rOut = rOut + 1
+    Next sk
+
+    ws.Cells(rOut, 1).Value = "合計"
+    For si = 1 To 5
+        ws.Cells(rOut, si + 1).Value = "=SUM(" & ws.Cells(3, si + 1).Address(False, False) & ":" & ws.Cells(rOut - 1, si + 1).Address(False, False) & ")"
+    Next si
+    col = 7
+    For Each dk In dateOrder
+        ws.Cells(rOut, col).Value = "=SUM(" & ws.Cells(3, col).Address(False, False) & ":" & ws.Cells(rOut - 1, col).Address(False, False) & ")"
+        col = col + 1
+    Next dk
+    ws.Cells(rOut, tcol).Value = "=SUM(" & ws.Cells(rOut, 7).Address(False, False) & ":" & ws.Cells(rOut, tcol - 1).Address(False, False) & ")"
+    StyleData ws, 3, rOut - 1, 1, tcol
+    StyleTotal ws, rOut, 1, tcol
+    AutoFitSheet ws
 End Sub
