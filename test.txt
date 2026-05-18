@@ -1,6 +1,8 @@
-Dim r As Long
-For r = 2 To 100
-    If InStr(ThisWorkbook.Sheets("データ").Cells(r,10).Value, "決裁") > 0 Then
-        Debug.Print r & ": [" & ThisWorkbook.Sheets("データ").Cells(r,10).Value & "]"
-    End If
-Next r
+Sub CheckData()
+    Dim r As Long
+    For r = 2 To 100
+        If InStr(ThisWorkbook.Sheets("データ").Cells(r, 10).Value, "決裁") > 0 Then
+            Debug.Print r & ": [" & ThisWorkbook.Sheets("データ").Cells(r, 10).Value & "]"
+        End If
+    Next r
+End Sub
