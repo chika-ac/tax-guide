@@ -1,4 +1,4 @@
-Sub ExportFinalFAQ()
+あSub ExportFinalFAQ()
     Dim wsFAQ As Worksheet
     Dim wsDup As Worksheet
     Dim wsFinal As Worksheet
@@ -12,6 +12,8 @@ Sub ExportFinalFAQ()
     Dim newA As String
     Dim newKw As String
     Dim newShin As String
+    Dim rowA As Long
+    Dim rowB As Long
 
     Set wsFAQ = ThisWorkbook.Sheets("FAQ")
 
@@ -61,28 +63,17 @@ Sub ExportFinalFAQ()
     Application.ScreenUpdating = False
 
     ' ----------------------------------------------------------------
-    ' STEP1：各FAQ行の最終判定を決める
-    ' 考え方：
-    '   削除候補でも別の比較で「残す」判定があれば残す
-    '   新規作成（Ryoho_Sakujo_Shinkiseisei）は別途処理
+    ' STEP1：残すフラグ・削除フラグを別々に管理
     ' ----------------------------------------------------------------
+    Dim keepFlag() As Boolean
+    Dim deleteFlag() As Boolean
+    ReDim keepFlag(lastRowFAQ)
+    ReDim deleteFlag(lastRowFAQ)
 
-    ' 配列で各行の状態を管理
-    ' 0=未登場（そのまま出力）、1=残す、2=削除、3=新規作成（削除）
-    Dim faqStatus() As Integer
-    ReDim faqStatus(lastRowFAQ)
-    For i = 1 To lastRowFAQ
-        faqStatus(i) = 0
-    Next i
-
-    ' 新規作成データを格納する配列
     Dim newData() As String
     ReDim newData(lastRowDup, 4)
 
-    ' Duplicatesシートを走査
     For d = 2 To lastRowDup
-        Dim rowA As Long
-        Dim rowB As Long
         rowA = CLng(wsDup.Cells(d, 2).Value)
         rowB = CLng(wsDup.Cells(d, 7).Value)
         action = Trim(wsDup.Cells(d, 12).Value)
@@ -90,27 +81,20 @@ Sub ExportFinalFAQ()
 
         Select Case action
             Case "A_Nokosu"
-                ' Aは残す、Bは削除候補
-                ' Aがまだ未登場または削除候補なら残すに更新
-                If faqStatus(rowA) <> 2 Then faqStatus(rowA) = 1
-                ' Bが残す判定になっていなければ削除候補
-                If faqStatus(rowB) <> 1 Then faqStatus(rowB) = 2
+                keepFlag(rowA) = True
+                deleteFlag(rowB) = True
 
             Case "B_Nokosu"
-                ' Bは残す、Aは削除候補
-                If faqStatus(rowB) <> 2 Then faqStatus(rowB) = 1
-                If faqStatus(rowA) <> 1 Then faqStatus(rowA) = 2
+                keepFlag(rowB) = True
+                deleteFlag(rowA) = True
 
             Case "Ryoho_Nokosu"
-                ' 両方残す
-                If faqStatus(rowA) <> 2 Then faqStatus(rowA) = 1
-                If faqStatus(rowB) <> 2 Then faqStatus(rowB) = 1
+                keepFlag(rowA) = True
+                keepFlag(rowB) = True
 
             Case "Ryoho_Sakujo_Shinkiseisei"
-                ' 両方削除して新規作成
-                If faqStatus(rowA) <> 1 Then faqStatus(rowA) = 3
-                If faqStatus(rowB) <> 1 Then faqStatus(rowB) = 3
-                ' 新規データ保存
+                deleteFlag(rowA) = True
+                deleteFlag(rowB) = True
                 newData(d, 0) = wsFAQ.Cells(rowA, 1).Value
                 newData(d, 1) = Trim(wsDup.Cells(d, 13).Value)
                 newData(d, 2) = Trim(wsDup.Cells(d, 14).Value)
@@ -118,9 +102,8 @@ Sub ExportFinalFAQ()
                 newData(d, 4) = Trim(wsDup.Cells(d, 16).Value)
 
             Case "Ryoho_Sakujo"
-                ' 両方削除
-                If faqStatus(rowA) <> 1 Then faqStatus(rowA) = 2
-                If faqStatus(rowB) <> 1 Then faqStatus(rowB) = 2
+                deleteFlag(rowA) = True
+                deleteFlag(rowB) = True
         End Select
     Next d
 
@@ -129,16 +112,13 @@ Sub ExportFinalFAQ()
     ' ----------------------------------------------------------------
     outRow = 2
 
-    ' FAQ行を順番に出力
     For i = 2 To lastRowFAQ
-        Select Case faqStatus(i)
-            Case 0, 1
-                ' 未登場またはResidue→そのまま出力
-                wsFAQ.Rows(i).Copy wsFinal.Rows(outRow)
-                outRow = outRow + 1
-            Case 2, 3
-                ' 削除 → 出力しない
-        End Select
+        ' 残すフラグあり、またはどちらのフラグもない（重複に未登場）→ 出力
+        ' 削除フラグあり かつ 残すフラグなし → 出力しない
+        If keepFlag(i) Or Not deleteFlag(i) Then
+            wsFAQ.Rows(i).Copy wsFinal.Rows(outRow)
+            outRow = outRow + 1
+        End If
     Next i
 
     ' 新規作成データを出力
