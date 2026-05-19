@@ -1,10 +1,957 @@
-For colIdx = 0 To quoteColCount - 1
-    With wsResult.Cells(resultRow, colIdx + 1)
-        .NumberFormat      = "@"
-        .Value             = wsData.Cells(k, quoteCols(colIdx)).Text
-        .Font.Name         = "Arial"
-        .Font.Size         = 10
-        .VerticalAlignment = xlVAlignCenter
-        .Interior.Color    = currentColor
+' ============================================================
+' 通勤届データ取込・チェック自動化 VBAコード【最新版】
+' ============================================================
+' 【シート構成】
+' 　作業手順書
+' 　Accessデータ1〜Accessデータ10（10シート）
+' 　チェック設定
+' 　チェック結果
+'
+' 【チェック設定シートの設定方法】
+'
+' 　【ファイル名設定】
+' 　　A列：【ファイル名設定】← このラベル
+' 　　次の行以降：
+' 　　A列：Accessデータ1　B列：通勤届_基本情報.xlsx
+' 　　A列：Accessデータ2　B列：通勤届_申請情報.xlsx
+' 　　・・・（空行で終了）
+'
+' 　【Accessデータ2確認手順】
+' 　　A列：【Accessデータ2確認手順】← このラベル
+' 　　次の行：確認内容（Alt+Enterで改行可）
+'
+' 　【引用列設定】
+' 　　※ データ読込時の取込列・チェック結果の表示列を兼ねます
+' 　　A列：【引用列設定】← このラベル
+' 　　次の行以降：
+' 　　A列：シート名　B列：引用列（例：A,B,C,D）　C列：確認手順
+' 　　・・・（空行で終了）
+' 　　※ 引用列はA列から連続で詰めて貼り付けられます
+' 　　　 例：A,C,E列を指定→A列・B列・C列に貼り付け
+'
+' 　※ Accessデータ2のB列重複チェックはVBAで自動処理されるため
+' 　　 チェック設定表への記載は不要です
+'
+' 【貼り付け先：2箇所】
+' 　①標準モジュール（Module1）← このファイルの標準モジュール部分
+' 　②Sheet（チェック結果）　　← このファイルの末尾★チェック結果部分
+' 　※②はコメントアウト（'）を外して貼り付けてください
+' ============================================================
+
+' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+' ★★★ ここから標準モジュール（Module1）に貼り付け ★★★
+' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+Option Explicit
+
+' ============================================================
+' 定数定義
+' ============================================================
+Const SHEET_MANUAL  As String = "作業手順書"
+Const SHEET_CONFIG  As String = "チェック設定"
+Const SHEET_RESULT  As String = "チェック結果"
+Const ACCESS_PREFIX As String = "Accessデータ"
+Const ACCESS_COUNT  As Long = 10
+
+' チェック結果列数
+Const COL_NG2 As Long = 12  ' Accessデータ2 重複NG一覧
+
+' 色定数
+Const COLOR_BLUE  As Long = 15787222  ' RGB(214, 228, 240) 薄青・実測値
+Const COLOR_WHITE As Long = 16777215  ' RGB(255, 255, 255) 白
+
+' ============================================================
+' シート名を返すFunction
+' ============================================================
+Private Function Accessシート名(ByVal num As Long) As String
+    Accessシート名 = ACCESS_PREFIX & num
+End Function
+
+' ============================================================
+' 申請番号基準の色を返すFunction
+' ============================================================
+Private Function 申請番号色(ByVal currentVal As String, _
+                             ByVal prevVal As String, _
+                             ByRef currentColor As Long) As Long
+    If currentVal <> prevVal Then
+        If currentColor = COLOR_BLUE Then
+            currentColor = COLOR_WHITE
+        Else
+            currentColor = COLOR_BLUE
+        End If
+    End If
+    申請番号色 = currentColor
+End Function
+
+' ============================================================
+' 【引用列設定】から指定シートの引用列を取得するFunction
+' 戻り値：カンマ区切りの列文字列（例："A,C,E"）
+' ============================================================
+Private Function 引用列取得(ByVal sheetName As String) As String
+    Dim wsConfig   As Worksheet
+    Dim memoRow    As Long
+    Dim settingRow As Long
+
+    Set wsConfig = ThisWorkbook.Sheets(SHEET_CONFIG)
+    引用列取得 = ""
+
+    settingRow = 0
+    For memoRow = 1 To wsConfig.Rows.Count
+        If InStr(wsConfig.Cells(memoRow, 1).Value, "引用列設定") > 0 Then
+            settingRow = memoRow + 1
+            Exit For
+        End If
+    Next memoRow
+
+    If settingRow = 0 Then Exit Function
+
+    Do While wsConfig.Cells(settingRow, 1).Value <> ""
+        If Trim(wsConfig.Cells(settingRow, 1).Value) = sheetName Then
+            引用列取得 = Trim(wsConfig.Cells(settingRow, 2).Value)
+            Exit Function
+        End If
+        settingRow = settingRow + 1
+    Loop
+End Function
+
+' ============================================================
+' 列文字を列番号の配列に変換するFunction
+' ============================================================
+Private Function 列文字を列番号配列に変換(ByVal colsStr As String, _
+                                            ByRef quoteCols() As Long, _
+                                            ByRef colCount As Long) As Boolean
+    Dim colArr()  As String
+    Dim idx       As Long
+    Dim colLetter As String
+    Dim colNum    As Long
+    Dim ci        As Integer
+
+    If colsStr = "" Then
+        列文字を列番号配列に変換 = False
+        Exit Function
+    End If
+
+    colArr   = Split(colsStr, ",")
+    colCount = UBound(colArr) + 1
+    ReDim quoteCols(colCount - 1)
+
+    For idx = 0 To colCount - 1
+        colLetter = Trim(colArr(idx))
+        colNum    = 0
+        For ci = 1 To Len(colLetter)
+            colNum = colNum * 26 + _
+                     (Asc(UCase(Mid(colLetter, ci, 1))) - Asc("A") + 1)
+        Next ci
+        quoteCols(idx) = colNum
+    Next idx
+
+    列文字を列番号配列に変換 = True
+End Function
+
+' ============================================================
+' STEP1：リセット処理
+' ============================================================
+Sub リセット()
+
+    If MsgBox("前回のデータとチェック結果をすべてクリアします。よろしいですか？", _
+              vbYesNo + vbQuestion, "リセット確認") = vbNo Then Exit Sub
+
+    Dim ws       As Worksheet
+    Dim ws8      As Worksheet
+    Dim wsM      As Worksheet
+    Dim i        As Long
+    Dim j        As Integer
+    Dim lastRow8 As Long
+    Dim wsExists As Boolean
+    Dim wsCheck  As Worksheet
+
+    Set ws8 = ThisWorkbook.Sheets(SHEET_RESULT)
+    Set wsM = ThisWorkbook.Sheets(SHEET_MANUAL)
+
+    ' Accessデータ1〜10シートをクリア（存在する場合のみ）
+    For i = 1 To ACCESS_COUNT
+        wsExists = False
+        For Each wsCheck In ThisWorkbook.Sheets
+            If wsCheck.Name = Accessシート名(i) Then
+                wsExists = True
+                Exit For
+            End If
+        Next wsCheck
+        If wsExists Then
+            Set ws = ThisWorkbook.Sheets(Accessシート名(i))
+            Call シートクリア(ws, 2)
+        End If
+    Next i
+
+    ' チェック結果クリア
+    With ws8
+        If .Cells.Find("*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious) Is Nothing Then
+            lastRow8 = 4
+        Else
+            lastRow8 = .Cells.Find("*", SearchOrder:=xlByRows, _
+                                   SearchDirection:=xlPrevious).Row
+        End If
     End With
-Next colIdx
+
+    If lastRow8 > 4 Then
+        ws8.Rows("5:" & lastRow8).Delete
+    End If
+
+    ws8.Range("D2").MergeArea.ClearContents
+    ws8.Range("I2").MergeArea.ClearContents
+    ws8.Range("C3").MergeArea.ClearContents
+    ws8.Range("G3").MergeArea.ClearContents
+    ws8.Range("I3").MergeArea.Value          = "全OK：未確認"
+    ws8.Range("I3").MergeArea.Interior.Color = RGB(217, 217, 217)
+    ws8.Range("I3").MergeArea.Font.Color     = RGB(0, 0, 0)
+    ws8.Range("I3").MergeArea.Font.Bold      = False
+
+    For j = 4 To 9
+        wsM.Cells(j, 8).Value = "□"
+    Next j
+
+    MsgBox "リセット完了しました。STEP2から作業を開始してください。", vbInformation, "リセット完了"
+    ThisWorkbook.Sheets(SHEET_MANUAL).Activate
+
+End Sub
+
+' ============================================================
+' シートクリア共通処理
+' ============================================================
+Private Sub シートクリア(ByVal ws As Worksheet, ByVal headerRow As Long)
+    If ws.Cells(ws.Rows.Count, 1).End(xlUp).Row > headerRow Then
+        ws.Rows((headerRow + 1) & ":" & ws.Cells(ws.Rows.Count, 1).End(xlUp).Row).Delete
+    End If
+End Sub
+
+' ============================================================
+' STEP2：Accessデータ一括読込
+' ※ 【引用列設定】で指定した列だけ取り込みます
+' ============================================================
+Sub Accessデータ一括読込()
+
+    Dim i As Long
+    For i = 1 To ACCESS_COUNT
+        Call Accessデータ読込(i)
+    Next i
+
+    ThisWorkbook.Sheets(SHEET_MANUAL).Cells(5, 8).Value = "✅"
+    MsgBox "Accessデータの読込がすべて完了しました。", vbInformation, "一括読込完了"
+    ThisWorkbook.Sheets(SHEET_MANUAL).Activate
+
+End Sub
+
+' ============================================================
+' Accessデータ読込 共通処理
+' 【引用列設定】で指定した列だけをA列から詰めて貼り付け
+' ============================================================
+Private Sub Accessデータ読込(ByVal fileNo As Long)
+
+    Dim fileName     As String
+    Dim targetSheet  As String
+    Dim downloadPath As String
+    Dim fullPath     As String
+    Dim srcWb        As Workbook
+    Dim srcWs        As Worksheet
+    Dim destWs       As Worksheet
+    Dim lastRow      As Long
+    Dim r            As Long
+    Dim c            As Long
+    Dim prevVal      As String
+    Dim currentColor As Long
+    Dim rowVal       As String
+    Dim colsStr      As String
+    Dim quoteCols()  As Long
+    Dim colCount     As Long
+    Dim colIdx       As Long
+
+    targetSheet = Accessシート名(fileNo)
+
+    ' チェック設定シートからファイル名を取得
+    fileName = ファイル名取得(fileNo)
+    If fileName = "" Then
+        MsgBox "【エラー】ファイル名設定が見つかりません。" & vbCrLf & vbCrLf & _
+               "チェック設定シートの【ファイル名設定】を確認してください。" & vbCrLf & _
+               "対象：" & targetSheet, vbExclamation, "設定なし"
+        Exit Sub
+    End If
+
+    ' 【引用列設定】から引用列を取得
+    colsStr = 引用列取得(targetSheet)
+    If colsStr = "" Then
+        MsgBox "【エラー】引用列設定が見つかりません。" & vbCrLf & vbCrLf & _
+               "チェック設定シートの【引用列設定】を確認してください。" & vbCrLf & _
+               "対象：" & targetSheet, vbExclamation, "設定なし"
+        Exit Sub
+    End If
+
+    ' 列文字を列番号配列に変換
+    If Not 列文字を列番号配列に変換(colsStr, quoteCols, colCount) Then
+        Exit Sub
+    End If
+
+    downloadPath = "\\YH-23-00000178\share\03.決裁報告\06.通勤届\★決裁依頼前チェック\"
+    fullPath     = downloadPath & fileName
+
+    If Dir(fullPath) = "" Then
+        MsgBox "【エラー】ファイルが見つかりません。" & vbCrLf & vbCrLf & _
+               "場所：" & fullPath & vbCrLf & vbCrLf & _
+               "Accessのボタンを押してExcelを出力してから再度実行してください。", _
+               vbExclamation, "ファイルなし（" & fileName & "）"
+        Exit Sub
+    End If
+
+    Application.ScreenUpdating = False
+
+    Set destWs = ThisWorkbook.Sheets(targetSheet)
+    Call シートクリア(destWs, 2)
+
+    Set srcWb = Workbooks.Open(fullPath, ReadOnly:=True)
+    Set srcWs = srcWb.Sheets(1)
+
+    lastRow = srcWs.Cells(srcWs.Rows.Count, 1).End(xlUp).Row
+
+    If lastRow < 2 Then
+        srcWb.Close False
+        Application.ScreenUpdating = True
+        MsgBox "【エラー】データがありません。" & vbCrLf & _
+               "ファイル：" & fileName, vbExclamation, "データなし"
+        Exit Sub
+    End If
+
+    ' ヘッダー行（2行目）を指定列だけA列から詰めてコピー
+    For colIdx = 0 To colCount - 1
+        destWs.Cells(2, colIdx + 1).NumberFormat = "@"
+        destWs.Cells(2, colIdx + 1).Value = srcWs.Cells(2, quoteCols(colIdx)).Text
+        With destWs.Cells(2, colIdx + 1)
+            .Font.Name      = "Arial"
+            .Font.Size      = 10
+            .Font.Bold      = True
+            .Interior.Color = RGB(31, 78, 121)
+            .Font.Color     = RGB(255, 255, 255)
+        End With
+    Next colIdx
+
+    ' データ行（3行目以降）を指定列だけA列から詰めてコピー
+    prevVal      = ""
+    currentColor = COLOR_WHITE
+
+    For r = 3 To lastRow
+        ' 申請番号（A列）基準で色分け
+        rowVal       = CStr(srcWs.Cells(r, quoteCols(0)).Text)
+        currentColor = 申請番号色(rowVal, prevVal, currentColor)
+        prevVal      = rowVal
+
+        For colIdx = 0 To colCount - 1
+            With destWs.Cells(r, colIdx + 1)
+                .NumberFormat  = "@"
+                .Value         = srcWs.Cells(r, quoteCols(colIdx)).Text
+                .Font.Name     = "Arial"
+                .Font.Size     = 10
+                .Interior.Color = currentColor
+            End With
+        Next colIdx
+    Next r
+
+    srcWb.Close False
+    Application.ScreenUpdating = True
+
+End Sub
+
+' ============================================================
+' STEP3：チェック実行メイン
+' ============================================================
+Sub チェック実行()
+
+    If MsgBox("チェックを実行します。データの取込は完了していますか？", _
+              vbYesNo + vbQuestion, "チェック実行確認") = vbNo Then Exit Sub
+
+    Application.ScreenUpdating = False
+
+    Dim wsResult As Worksheet
+    Dim wsConfig As Worksheet
+
+    Set wsResult = ThisWorkbook.Sheets(SHEET_RESULT)
+    Set wsConfig = ThisWorkbook.Sheets(SHEET_CONFIG)
+
+    ' チェック結果クリア
+    Dim lastRowR As Long
+    With wsResult
+        If .Cells.Find("*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious) Is Nothing Then
+            lastRowR = 4
+        Else
+            lastRowR = .Cells.Find("*", SearchOrder:=xlByRows, _
+                                   SearchDirection:=xlPrevious).Row
+        End If
+    End With
+    If lastRowR > 4 Then
+        wsResult.Rows("5:" & lastRowR).Delete
+    End If
+
+    wsResult.Range("D2").Value        = Now()
+    wsResult.Range("D2").NumberFormat = "yyyy/mm/dd hh:mm:ss"
+
+    ' 変数宣言
+    Dim resultRow2  As Long
+    Dim resultRow3  As Long
+    Dim totalNG     As Long
+    Dim totalCheck  As Long
+
+    totalNG    = 0
+    totalCheck = 0
+
+    ' ============================================================
+    ' ▼ Accessデータ2 重複NG一覧セクション
+    ' ============================================================
+    wsResult.Rows(4).RowHeight = 8
+
+    Dim sec2Row As Long
+    sec2Row = 5
+
+    Call セクションタイトル描画(wsResult, sec2Row, _
+                                "▼ Accessデータ2 重複NG一覧（B列）", 11, RGB(31, 78, 121), COL_NG2)
+
+    Dim sec2Headers(11) As String
+    sec2Headers(0)  = "#"
+    sec2Headers(1)  = "列名"
+    sec2Headers(2)  = "チェック種別"
+    sec2Headers(3)  = "件数"
+    sec2Headers(4)  = "NG数"
+    sec2Headers(5)  = "判定"
+    sec2Headers(6)  = "申請番号"
+    sec2Headers(7)  = "職員番号"
+    sec2Headers(8)  = "氏名"
+    sec2Headers(9)  = "NG値"
+    sec2Headers(10) = "確認手順"
+    sec2Headers(11) = "済"
+
+    Call ヘッダー行描画(wsResult, sec2Row + 1, sec2Headers, COL_NG2 - 1, RGB(31, 78, 121))
+    resultRow2 = sec2Row + 2
+
+    Call Access2重複チェック(wsResult, resultRow2, totalNG, totalCheck, wsConfig)
+
+    ' ============================================================
+    ' ▼ 引用一覧セクション（【引用列設定】を使用）
+    ' ============================================================
+    wsResult.Rows(resultRow2).RowHeight = 8
+    resultRow3 = resultRow2 + 1
+
+    Call Access引用一覧全描画(wsResult, resultRow3, wsConfig)
+
+    ' ============================================================
+    ' サマリー更新
+    ' ============================================================
+    wsResult.Range("C3").Value = totalCheck & "件"
+    wsResult.Range("G3").Value = totalNG & "件"
+
+    If totalNG = 0 Then
+        wsResult.Range("I3").Value          = "✅全チェックOK"
+        wsResult.Range("I3").Interior.Color = RGB(198, 239, 206)
+        wsResult.Range("I3").Font.Color     = RGB(55, 86, 35)
+        wsResult.Range("I3").Font.Bold      = True
+    Else
+        wsResult.Range("I3").Value          = "❌NG " & totalNG & "件あり"
+        wsResult.Range("I3").Interior.Color = RGB(255, 199, 206)
+        wsResult.Range("I3").Font.Color     = RGB(192, 0, 0)
+        wsResult.Range("I3").Font.Bold      = True
+    End If
+
+    Application.ScreenUpdating = True
+    ThisWorkbook.Sheets(SHEET_MANUAL).Cells(8, 8).Value = "✅"
+
+    If totalNG = 0 Then
+        MsgBox "チェック完了！" & vbCrLf & "NGはありませんでした。", _
+               vbInformation, "チェック完了"
+    Else
+        MsgBox "チェック完了！" & vbCrLf & "NG：" & totalNG & "件あります。" & vbCrLf & vbCrLf & _
+               "赤くなっている行を確認し、対応後に済チェックを入れてください。", _
+               vbExclamation, "チェック完了（NG有）"
+    End If
+
+End Sub
+
+' ============================================================
+' チェック設定シートからメモを取得する共通処理
+' ============================================================
+Private Function 設定メモ取得(ByVal wsConfig As Worksheet, _
+                               ByVal label As String) As String
+    Dim memoRow As Long
+    設定メモ取得 = ""
+    For memoRow = 1 To wsConfig.Rows.Count
+        If InStr(wsConfig.Cells(memoRow, 1).Value, label) > 0 Then
+            設定メモ取得 = wsConfig.Cells(memoRow + 1, 1).Value
+            Exit For
+        End If
+    Next memoRow
+End Function
+
+' ============================================================
+' チェック設定シートからファイル名を取得する処理
+' ============================================================
+Private Function ファイル名取得(ByVal fileNo As Long) As String
+
+    Dim wsConfig   As Worksheet
+    Dim memoRow    As Long
+    Dim settingRow As Long
+    Dim sheetName  As String
+
+    Set wsConfig = ThisWorkbook.Sheets(SHEET_CONFIG)
+    ファイル名取得 = ""
+
+    settingRow = 0
+    For memoRow = 1 To wsConfig.Rows.Count
+        If InStr(wsConfig.Cells(memoRow, 1).Value, "ファイル名設定") > 0 Then
+            settingRow = memoRow + 1
+            Exit For
+        End If
+    Next memoRow
+
+    If settingRow = 0 Then Exit Function
+
+    sheetName = Accessシート名(fileNo)
+    Do While wsConfig.Cells(settingRow, 1).Value <> ""
+        If Trim(wsConfig.Cells(settingRow, 1).Value) = sheetName Then
+            ファイル名取得 = Trim(wsConfig.Cells(settingRow, 2).Value)
+            Exit Function
+        End If
+        settingRow = settingRow + 1
+    Loop
+
+End Function
+
+' ============================================================
+' Accessデータ2 B列重複チェック（重複行をすべて展開）
+' ※ 読込時にB列が2列目に詰められている前提
+' ============================================================
+Private Sub Access2重複チェック(ByRef wsResult As Worksheet, _
+                                 ByRef resultRow As Long, _
+                                 ByRef totalNG As Long, _
+                                 ByRef totalCheck As Long, _
+                                 ByVal wsConfig As Worksheet)
+    Dim wsAccess2    As Worksheet
+    Dim dataStartRow As Long
+    Dim dataLastRow  As Long
+    Dim k            As Long
+    Dim ngCount      As Long
+    Dim ngValues     As Object
+    Dim ngVal        As Variant
+    Dim isFirst      As Boolean
+    Dim cellVal      As String
+    Dim dupDict      As Object
+    Dim key          As Variant
+    Dim confirmNote  As String
+    Dim prevVal      As String
+    Dim currentColor As Long
+
+    confirmNote = 設定メモ取得(wsConfig, "Accessデータ2確認手順")
+
+    Set wsAccess2 = ThisWorkbook.Sheets(Accessシート名(2))
+    dataStartRow  = 3
+    dataLastRow   = wsAccess2.Cells(wsAccess2.Rows.Count, 1).End(xlUp).Row
+
+    If dataLastRow < dataStartRow Then
+        totalCheck = totalCheck + 1
+        Exit Sub
+    End If
+
+    ' 重複している職員番号（B列=2列目）を特定
+    Set dupDict = CreateObject("Scripting.Dictionary")
+    For k = dataStartRow To dataLastRow
+        cellVal = CStr(wsAccess2.Cells(k, 2).Value)
+        If cellVal <> "" Then
+            If dupDict.Exists(cellVal) Then
+                dupDict(cellVal) = dupDict(cellVal) + 1
+            Else
+                dupDict.Add cellVal, 1
+            End If
+        End If
+    Next k
+
+    ' 重複している行をすべてngValuesに格納
+    ngCount = 0
+    Set ngValues = CreateObject("System.Collections.ArrayList")
+
+    For k = dataStartRow To dataLastRow
+        cellVal = CStr(wsAccess2.Cells(k, 2).Value)
+        If dupDict.Exists(cellVal) Then
+            If dupDict(cellVal) > 1 Then
+                ngCount = ngCount + 1
+                ngValues.Add Array(wsAccess2.Cells(k, 1).Value, _
+                                   wsAccess2.Cells(k, 2).Value, _
+                                   wsAccess2.Cells(k, 3).Value, _
+                                   cellVal & "（重複）")
+            End If
+        End If
+    Next k
+
+    totalCheck = totalCheck + 1
+    If ngCount = 0 Then Exit Sub
+
+    totalNG      = totalNG + 1
+    isFirst      = True
+    prevVal      = ""
+    currentColor = COLOR_WHITE
+
+    For Each ngVal In ngValues
+        currentColor = 申請番号色(CStr(ngVal(0)), prevVal, currentColor)
+        prevVal = CStr(ngVal(0))
+
+        With wsResult
+            If isFirst Then
+                .Cells(resultRow, 1).Value  = totalCheck
+                .Cells(resultRow, 2).Value  = "B列"
+                .Cells(resultRow, 3).Value  = "重複チェック"
+                .Cells(resultRow, 4).Value  = (dataLastRow - dataStartRow + 1) & "件"
+                .Cells(resultRow, 5).Value  = ngCount
+                .Cells(resultRow, 6).Value  = "❌NG"
+                isFirst = False
+            Else
+                .Cells(resultRow, 1).Value  = ""
+                .Cells(resultRow, 2).Value  = ""
+                .Cells(resultRow, 3).Value  = ""
+                .Cells(resultRow, 4).Value  = ""
+                .Cells(resultRow, 5).Value  = ""
+                .Cells(resultRow, 6).Value  = ""
+            End If
+
+            .Cells(resultRow, 7).Value  = ngVal(0)
+            .Cells(resultRow, 8).Value  = ngVal(1)
+            .Cells(resultRow, 9).Value  = ngVal(2)
+            .Cells(resultRow, 10).Value = ngVal(3)
+            .Cells(resultRow, 11).Value = confirmNote
+            .Cells(resultRow, 12).Value = "□"
+
+            Call NG行書式設定(wsResult, resultRow, COL_NG2, currentColor)
+            .Cells(resultRow, 6).Font.Color = RGB(192, 0, 0)
+            .Cells(resultRow, 6).Font.Bold  = True
+            .Cells(resultRow, 11).WrapText  = True
+        End With
+        resultRow = resultRow + 1
+    Next ngVal
+
+    Call 区切り線描画(wsResult, resultRow - 1, COL_NG2)
+End Sub
+
+' ============================================================
+' 引用一覧全描画（【引用列設定】を使用）
+' ============================================================
+Private Sub Access引用一覧全描画(ByRef wsResult As Worksheet, _
+                                   ByRef resultRow As Long, _
+                                   ByVal wsConfig As Worksheet)
+    Dim memoRow     As Long
+    Dim settingRow  As Long
+    Dim sheetName   As String
+    Dim colsStr     As String
+    Dim confirmNote As String
+    Dim quoteCols() As Long
+    Dim colCount    As Long
+    Dim ws          As Worksheet
+    Dim wsExists    As Boolean
+
+    ' 【引用列設定】ラベルを探す
+    settingRow = 0
+    For memoRow = 1 To wsConfig.Rows.Count
+        If InStr(wsConfig.Cells(memoRow, 1).Value, "引用列設定") > 0 Then
+            settingRow = memoRow + 1
+            Exit For
+        End If
+    Next memoRow
+
+    If settingRow = 0 Then Exit Sub
+
+    Do While wsConfig.Cells(settingRow, 1).Value <> ""
+
+        sheetName   = Trim(wsConfig.Cells(settingRow, 1).Value)
+        colsStr     = Trim(wsConfig.Cells(settingRow, 2).Value)
+        confirmNote = wsConfig.Cells(settingRow, 3).Value
+
+        wsExists = False
+        For Each ws In ThisWorkbook.Sheets
+            If ws.Name = sheetName Then
+                wsExists = True
+                Exit For
+            End If
+        Next ws
+
+        If wsExists And colsStr <> "" Then
+            If 列文字を列番号配列に変換(colsStr, quoteCols, colCount) Then
+                ' 読込後のAccessデータシートは1列目から連続で詰まっているため
+                ' 引用列は1〜colCountの連番で指定
+                Dim i As Long
+                Dim seqCols() As Long
+                ReDim seqCols(colCount - 1)
+                For i = 0 To colCount - 1
+                    seqCols(i) = i + 1
+                Next i
+
+                Call 引用一覧描画(wsResult, resultRow, sheetName, _
+                                 "▼ " & sheetName & " 引用一覧", _
+                                 confirmNote, seqCols, colCount)
+            End If
+        End If
+
+        settingRow = settingRow + 1
+    Loop
+
+End Sub
+
+' ============================================================
+' 引用一覧描画（各シート共通）
+' ============================================================
+Private Sub 引用一覧描画(ByRef wsResult As Worksheet, _
+                          ByRef resultRow As Long, _
+                          ByVal sheetName As String, _
+                          ByVal sectionTitle As String, _
+                          ByVal confirmNote As String, _
+                          ByVal quoteCols As Variant, _
+                          ByVal quoteColCount As Long)
+    Dim wsData       As Worksheet
+    Dim dataStartRow As Long
+    Dim dataLastRow  As Long
+    Dim k            As Long
+    Dim colIdx       As Long
+    Dim memoLines()  As String
+    Dim memoLine     As Variant
+    Dim totalCols    As Long
+    Dim prevVal      As String
+    Dim currentColor As Long
+    Dim rowVal       As String
+
+    totalCols = quoteColCount + 1
+
+    Set wsData    = ThisWorkbook.Sheets(sheetName)
+    dataStartRow  = 3
+    dataLastRow   = wsData.Cells(wsData.Rows.Count, 1).End(xlUp).Row
+
+    If dataLastRow < dataStartRow Then Exit Sub
+
+    wsResult.Rows(resultRow).RowHeight = 8
+    resultRow = resultRow + 1
+
+    Call セクションタイトル描画(wsResult, resultRow, sectionTitle, _
+                                11, RGB(31, 78, 121), totalCols)
+    resultRow = resultRow + 1
+
+    ' 確認ポイント描画
+    If confirmNote <> "" Then
+        With wsResult
+            .Cells(resultRow, 1).Value      = "【確認ポイント】"
+            .Cells(resultRow, 1).Font.Name  = "Arial"
+            .Cells(resultRow, 1).Font.Size  = 10
+            .Cells(resultRow, 1).Font.Bold  = True
+            .Cells(resultRow, 1).Font.Color = RGB(192, 0, 0)
+            With .Range(.Cells(resultRow, 1), .Cells(resultRow, totalCols))
+                .Interior.Color = RGB(255, 242, 204)
+            End With
+            .Rows(resultRow).RowHeight = 18
+        End With
+        resultRow = resultRow + 1
+
+        memoLines = Split(confirmNote, vbLf)
+        For Each memoLine In memoLines
+            If Trim(CStr(memoLine)) <> "" Then
+                With wsResult
+                    .Cells(resultRow, 1).Value = Trim(CStr(memoLine))
+                    .Cells(resultRow, 1).Font.Name = "Arial"
+                    .Cells(resultRow, 1).Font.Size = 10
+                    With .Range(.Cells(resultRow, 1), .Cells(resultRow, totalCols))
+                        .Merge
+                        .Interior.Color = RGB(255, 242, 204)
+                    End With
+                    .Rows(resultRow).RowHeight = 18
+                End With
+                resultRow = resultRow + 1
+            End If
+        Next memoLine
+    End If
+
+    ' ヘッダー行（実際の列名を使用）
+    Dim quoteHeaders() As String
+    ReDim quoteHeaders(quoteColCount)
+    For colIdx = 0 To quoteColCount - 1
+        quoteHeaders(colIdx) = wsData.Cells(2, quoteCols(colIdx)).Value
+    Next colIdx
+    quoteHeaders(quoteColCount) = "済"
+
+    Call ヘッダー行描画(wsResult, resultRow, quoteHeaders, quoteColCount, RGB(31, 78, 121))
+    resultRow = resultRow + 1
+
+    ' データ全行出力（申請番号A列基準で色分け）
+    prevVal      = ""
+    currentColor = COLOR_WHITE
+
+    For k = dataStartRow To dataLastRow
+        rowVal       = CStr(wsData.Cells(k, 1).Value)
+        currentColor = 申請番号色(rowVal, prevVal, currentColor)
+        prevVal      = rowVal
+
+        For colIdx = 0 To quoteColCount - 1
+            With wsResult.Cells(resultRow, colIdx + 1)
+                .NumberFormat      = "@"
+                .Value             = wsData.Cells(k, quoteCols(colIdx)).Value
+                .Font.Name         = "Arial"
+                .Font.Size         = 10
+                .VerticalAlignment = xlVAlignCenter
+                .Interior.Color    = currentColor
+            End With
+        Next colIdx
+
+        With wsResult.Cells(resultRow, totalCols)
+            .Value               = "□"
+            .Font.Name           = "Arial"
+            .Font.Size           = 10
+            .HorizontalAlignment = xlHAlignCenter
+            .VerticalAlignment   = xlVAlignCenter
+            .Interior.Color      = currentColor
+        End With
+
+        With wsResult.Range(wsResult.Cells(resultRow, 1), _
+                            wsResult.Cells(resultRow, totalCols)).Borders
+            .LineStyle = xlContinuous
+            .Color     = RGB(191, 191, 191)
+            .Weight    = xlThin
+        End With
+
+        resultRow = resultRow + 1
+    Next k
+End Sub
+
+' ============================================================
+' 共通：セクションタイトル行描画
+' ============================================================
+Private Sub セクションタイトル描画(ByVal ws As Worksheet, _
+                                    ByVal rowNum As Long, _
+                                    ByVal title As String, _
+                                    ByVal fontSize As Integer, _
+                                    ByVal bgColor As Long, _
+                                    ByVal colCount As Long)
+    With ws
+        .Cells(rowNum, 1).Value = title
+        With .Range(.Cells(rowNum, 1), .Cells(rowNum, colCount))
+            .Merge
+            .Font.Name           = "Arial"
+            .Font.Size           = fontSize
+            .Font.Bold           = True
+            .Font.Color          = RGB(255, 255, 255)
+            .Interior.Color      = bgColor
+            .VerticalAlignment   = xlVAlignCenter
+            .HorizontalAlignment = xlHAlignLeft
+        End With
+        .Rows(rowNum).RowHeight = 22
+    End With
+End Sub
+
+' ============================================================
+' 共通：ヘッダー行描画
+' ============================================================
+Private Sub ヘッダー行描画(ByVal ws As Worksheet, _
+                            ByVal rowNum As Long, _
+                            ByVal headers As Variant, _
+                            ByVal colCount As Long, _
+                            ByVal bgColor As Long)
+    Dim c As Long
+    For c = 0 To colCount
+        With ws.Cells(rowNum, c + 1)
+            .Value               = headers(c)
+            .Font.Name           = "Arial"
+            .Font.Size           = 10
+            .Font.Bold           = True
+            .Font.Color          = RGB(255, 255, 255)
+            .Interior.Color      = bgColor
+            .VerticalAlignment   = xlVAlignCenter
+            .HorizontalAlignment = xlHAlignCenter
+        End With
+    Next c
+
+    With ws.Range(ws.Cells(rowNum, 1), ws.Cells(rowNum, colCount + 1)).Borders
+        .LineStyle = xlContinuous
+        .Color     = RGB(191, 191, 191)
+        .Weight    = xlThin
+    End With
+
+    ws.Rows(rowNum).RowHeight = 22
+End Sub
+
+' ============================================================
+' 共通：NG行書式設定（色を引数で受け取る）
+' ============================================================
+Private Sub NG行書式設定(ByVal ws As Worksheet, _
+                          ByVal rowNum As Long, _
+                          ByVal colCount As Long, _
+                          ByVal rowColor As Long)
+    Dim c As Long
+    For c = 1 To colCount
+        With ws.Cells(rowNum, c)
+            .Font.Name         = "Arial"
+            .Font.Size         = 10
+            .VerticalAlignment = xlVAlignCenter
+            .Interior.Color    = rowColor
+            If c = 1 Or c = 5 Or c = 6 Or c = colCount Then
+                .HorizontalAlignment = xlHAlignCenter
+            End If
+        End With
+    Next c
+
+    With ws.Range(ws.Cells(rowNum, 1), ws.Cells(rowNum, colCount)).Borders
+        .LineStyle = xlContinuous
+        .Color     = RGB(191, 191, 191)
+        .Weight    = xlThin
+    End With
+End Sub
+
+' ============================================================
+' 共通：区切り線描画
+' ============================================================
+Private Sub 区切り線描画(ByVal ws As Worksheet, _
+                          ByVal rowNum As Long, _
+                          ByVal colCount As Long)
+    With ws.Range(ws.Cells(rowNum, 1), _
+                  ws.Cells(rowNum, colCount)).Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .Color     = RGB(192, 0, 0)
+        .Weight    = xlMedium
+    End With
+End Sub
+
+' ============================================================
+' 結果シートへジャンプ
+' ============================================================
+Sub 結果シートへジャンプ()
+    ThisWorkbook.Sheets(SHEET_RESULT).Activate
+End Sub
+
+' ============================================================
+' 手順書へジャンプ
+' ============================================================
+Sub 手順書へジャンプ()
+    ThisWorkbook.Sheets(SHEET_MANUAL).Activate
+End Sub
+
+
+' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+' ★★★ ここからチェック結果シートモジュールに貼り付け ★★★
+' ※ VBAエディタ左ツリーの「Sheet（チェック結果）」を
+'    ダブルクリックして開いたモジュールに貼り付けてください
+' ※ コメントアウト（行頭の '）を外して貼り付けてください
+' $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+'Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+'
+'    If Target.Row < 5 Then Exit Sub
+'
+'    Dim r As Long
+'    For r = Target.Row - 1 To 1 Step -1
+'        If Cells(r, Target.Column).Value = "済" Then
+'            Cancel = True
+'            If Target.Value = "□" Then
+'                Target.Value = "OK"
+'                Target.Interior.Color = RGB(198, 239, 206)
+'            ElseIf Target.Value = "OK" Then
+'                Target.Value = "□"
+'                Target.Interior.Color = RGB(255, 199, 206)
+'            End If
+'            Exit For
+'        End If
+'    Next r
+'
+'End Sub
