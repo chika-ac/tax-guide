@@ -99,3 +99,74 @@ Sub ExportFinalFAQ()
             Case "B_Nokosu"
                 ' Bは残す、Aは削除候補
                 If faqStatus(rowB) <> 2 Then faqStatus(rowB) = 1
+                If faqStatus(rowA) <> 1 Then faqStatus(rowA) = 2
+
+            Case "Ryoho_Nokosu"
+                ' 両方残す
+                If faqStatus(rowA) <> 2 Then faqStatus(rowA) = 1
+                If faqStatus(rowB) <> 2 Then faqStatus(rowB) = 1
+
+            Case "Ryoho_Sakujo_Shinkiseisei"
+                ' 両方削除して新規作成
+                If faqStatus(rowA) <> 1 Then faqStatus(rowA) = 3
+                If faqStatus(rowB) <> 1 Then faqStatus(rowB) = 3
+                ' 新規データ保存
+                newData(d, 0) = wsFAQ.Cells(rowA, 1).Value
+                newData(d, 1) = Trim(wsDup.Cells(d, 13).Value)
+                newData(d, 2) = Trim(wsDup.Cells(d, 14).Value)
+                newData(d, 3) = Trim(wsDup.Cells(d, 15).Value)
+                newData(d, 4) = Trim(wsDup.Cells(d, 16).Value)
+
+            Case "Ryoho_Sakujo"
+                ' 両方削除
+                If faqStatus(rowA) <> 1 Then faqStatus(rowA) = 2
+                If faqStatus(rowB) <> 1 Then faqStatus(rowB) = 2
+        End Select
+    Next d
+
+    ' ----------------------------------------------------------------
+    ' STEP2：FinalFAQシートに出力
+    ' ----------------------------------------------------------------
+    outRow = 2
+
+    ' FAQ行を順番に出力
+    For i = 2 To lastRowFAQ
+        Select Case faqStatus(i)
+            Case 0, 1
+                ' 未登場またはResidue→そのまま出力
+                wsFAQ.Rows(i).Copy wsFinal.Rows(outRow)
+                outRow = outRow + 1
+            Case 2, 3
+                ' 削除 → 出力しない
+        End Select
+    Next i
+
+    ' 新規作成データを出力
+    For d = 2 To lastRowDup
+        If newData(d, 1) <> "" Then
+            wsFinal.Cells(outRow, 1).Value = newData(d, 0)
+            wsFinal.Cells(outRow, 2).Value = newData(d, 1)
+            wsFinal.Cells(outRow, 3).Value = newData(d, 2)
+            wsFinal.Cells(outRow, 4).Value = newData(d, 3)
+            wsFinal.Cells(outRow, 5).Value = newData(d, 4)
+            wsFinal.Cells(outRow, 6).Value = Format(Now, "YYYY/MM/DD")
+            wsFinal.Rows(outRow).Font.Name = "Arial"
+            wsFinal.Rows(outRow).Font.Size = 9
+            wsFinal.Cells(outRow, 3).WrapText = True
+            wsFinal.Rows(outRow).RowHeight = 60
+            outRow = outRow + 1
+        End If
+    Next d
+
+    ' 列幅調整
+    wsFinal.Columns(1).ColumnWidth = 18
+    wsFinal.Columns(2).ColumnWidth = 35
+    wsFinal.Columns(3).ColumnWidth = 60
+    wsFinal.Columns(4).ColumnWidth = 25
+    wsFinal.Columns(5).ColumnWidth = 10
+    wsFinal.Columns(6).ColumnWidth = 12
+
+    Application.ScreenUpdating = True
+
+    MsgBox outRow - 2 & " ken no FAQ wo FinalFAQ sheet ni shutsuryoku shimashita."
+End Sub
