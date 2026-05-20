@@ -1,1 +1,1 @@
-case 'faq_search':    return buildFaqSearch();
+document.querySelector('.faq-search-wrapper')
