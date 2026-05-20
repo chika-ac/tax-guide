@@ -1,1 +1,1 @@
-=IF($B2="","",COUNTIF($B$2:B2,$B2))
+case 'faq_search':    return buildFaqSearch();
