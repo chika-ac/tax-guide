@@ -1,1 +1,1 @@
-document.querySelector('.faq-search-wrapper')
+console.log('buildFaqSearch called');
