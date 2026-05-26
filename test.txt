@@ -1,1 +1,7 @@
-あ
+results = allFaqs.filter(c => {
+        const haystack = normalize(
+          [c.title, c.body, c.keywords, c.short_note, c.category_id].join(' ')
+        );
+        const keywords = nQuery.split(/\s+/).filter(k => k.length > 0);
+        return keywords.every(k => haystack.includes(k));
+      });
