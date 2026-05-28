@@ -1,7 +1,13 @@
-results = allFaqs.filter(c => {
-        const haystack = normalize(
-          [c.title, c.body, c.keywords, c.short_note, c.category_id].join(' ')
-        );
-        const keywords = nQuery.split(/\s+/).filter(k => k.length > 0);
-        return keywords.every(k => haystack.includes(k));
-      });
+.faq-search-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--clr-bg);
+  padding-bottom: 10px;
+}
+
+
+
+
+
+searchWrap.className = 'faq-search-wrapper faq-search-sticky';
