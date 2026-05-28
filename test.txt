@@ -1,13 +1,759 @@
-.faq-search-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--clr-bg);
-  padding-bottom: 10px;
-}
+/**
+ * app.js  |  給与手当（ヘルプデスク）
+ * ─────────────────────────────────────────────────────────────
+ * window.__DATA__ (data.js) から全データを読み込み、
+ * タブ/アコーディオン/FAQ検索 を描画する。
+ * 本文(body)は純テキストとして扱い、HTML解釈しない（XSS対策）。
+ */
 
+(function () {
+  'use strict';
 
+  // ══════════════════════════════════════════════════════════════
+  //  0. データ取得
+  // ══════════════════════════════════════════════════════════════
+  const D = window.__DATA__;
 
+  if (!D) {
+    document.getElementById('content-body').innerHTML =
+      '<div class="error-msg">⚠ data.js が読み込まれていません。<br>' +
+      '<code>scripts/update_dev.bat</code> を実行してから再度開いてください。</div>';
+    return;
+  }
 
+  // ── ヘルパー ──────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function nl2br(str) { return esc(str).replace(/\n/g, '<br>'); }
+  // 全角→半角、大文字→小文字の正規化（FAQ検索用）
+  function normalize(str) {
+    return String(str ?? '')
+      .replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+      .toLowerCase()
+      .replace(/\s+/g,' ').trim();
+  }
 
-searchWrap.className = 'faq-search-wrapper faq-search-sticky';
+  // ── マスタ取得 ────────────────────────────────────────────────
+  const categories   = (D.category_master || []).filter(r => visible(r));
+  const sections     = (D.section_master  || []).filter(r => visible(r));
+  const blocks       = (D.section_blocks  || []).filter(r => visible(r));
+  const contents     = (D.content         || []).filter(r => visible(r));
+  const faqMap       = D.faq_map          || [];
+  const messages     = D.messages         || [];
+  const assetsMap    = D.assets_map       || [];
+  const decisionLogic= D.decision_logic   || [];
+  const uiSettings   = D.ui_settings      || [];
+
+  function visible(r) { return String(r.visible ?? 'yes').toLowerCase() !== 'no'; }
+  function getSetting(key, fallback) {
+    const r = uiSettings.find(s => s.setting_key === key);
+    return r ? r.value : fallback;
+  }
+  function getMessage(key) {
+    const r = messages.find(m => m.message_key === key && visible(m));
+    return r ? r.text : key;
+  }
+  function getAsset(assetId) {
+    return assetsMap.find(a => a.asset_id === assetId);
+  }
+
+  // ── UI設定 ───────────────────────────────────────────────────
+  const defaultCategory = getSetting('default_category', categories[0]?.category_id || '');
+  const defaultSection  = getSetting('default_section',  'criteria_overview');
+  const pageTitle       = getSetting('page_title',       '初動対応ツール');
+  const pageSubtitle    = getSetting('app_subtitle',     '');
+  const searchMinChars  = parseInt(getSetting('search_min_chars', '2'), 10);
+  document.title = pageTitle;
+  $('page-title').textContent    = pageTitle;
+  $('page-subtitle').textContent = pageSubtitle;
+
+  // ══════════════════════════════════════════════════════════════
+  //  1. 状態管理
+  // ══════════════════════════════════════════════════════════════
+  let state = {
+    activeCategoryId: defaultCategory,
+    activeSectionId:  defaultSection,
+    searchQuery:      '',
+  };
+
+  // ══════════════════════════════════════════════════════════════
+  //  2. サイドバー（カテゴリタブ）描画
+  // ══════════════════════════════════════════════════════════════
+  const COMMON_IDS = ['talk_script_basic','office_list','phone_list','ccp'];
+  const FAQ_IDS    = ['common'];
+
+  function renderSidebar() {
+    const business = categories.filter(c =>
+      !COMMON_IDS.includes(c.category_id) && !FAQ_IDS.includes(c.category_id)
+    ).sort((a,b) => Number(a.order) - Number(b.order));
+    const commons  = categories.filter(c => COMMON_IDS.includes(c.category_id))
+                               .sort((a,b) => Number(a.order) - Number(b.order));
+    const faqs     = categories.filter(c => FAQ_IDS.includes(c.category_id));
+
+    function buildList(listId, cats) {
+      const ul = $(listId);
+      ul.innerHTML = '';
+      for (const cat of cats) {
+        const li = document.createElement('li');
+        const a  = document.createElement('a');
+        a.href = '#';
+        a.dataset.catId = cat.category_id;
+        a.innerHTML = `<span class="cat-icon">${esc(cat.icon || '📄')}</span><span>${esc(cat.label)}</span>`;
+        a.className = cat.category_id === state.activeCategoryId ? 'active' : '';
+        a.addEventListener('click', e => {
+          e.preventDefault();
+          state.activeCategoryId = cat.category_id;
+          state.activeSectionId  = defaultSection;
+          state.searchQuery = '';
+          render();
+        });
+        li.appendChild(a);
+        ul.appendChild(li);
+      }
+    }
+    buildList('category-list',       business);
+    buildList('category-list-common', commons);
+    buildList('category-list-faq',    faqs);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  3. セクションタブ描画
+  // ══════════════════════════════════════════════════════════════
+  function getSectionsForCategory(categoryId) {
+    const cat = categories.find(c => c.category_id === categoryId);
+    if (!cat) return [];
+    const isCommon = FAQ_IDS.includes(categoryId);
+    if (isCommon) {
+      return sections.filter(s => s.applies_to === 'common')
+                     .sort((a,b) => Number(a.order) - Number(b.order));
+    }
+    const activeSecIds = new Set(
+      blocks.filter(b => b.category_id === categoryId || b.category_id === '*')
+            .map(b => b.section_id)
+    );
+    return sections.filter(s => s.applies_to !== 'common' && activeSecIds.has(s.section_id))
+                   .sort((a,b) => Number(a.order) - Number(b.order));
+  }
+
+  function renderSectionTabs() {
+    const ul = $('section-tab-list');
+    ul.innerHTML = '';
+    const secs = getSectionsForCategory(state.activeCategoryId);
+
+    if (!secs.find(s => s.section_id === state.activeSectionId) && secs.length > 0) {
+      state.activeSectionId = secs[0].section_id;
+    }
+
+    for (const sec of secs) {
+      const li = document.createElement('li');
+      const a  = document.createElement('a');
+      a.href = '#';
+      a.textContent = sec.label;
+      a.className = sec.section_id === state.activeSectionId ? 'active' : '';
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        state.activeSectionId = sec.section_id;
+        state.searchQuery = '';
+        render();
+      });
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  4. コンテンツ描画
+  // ══════════════════════════════════════════════════════════════
+  function renderContent() {
+    const area = $('content-body');
+    area.innerHTML = '';
+
+    if (state.activeSectionId === 'faq_search' && FAQ_IDS.includes(state.activeCategoryId)) {
+      area.appendChild(buildFaqSearch());
+      return;
+    }
+
+    const targetBlocks = blocks
+      .filter(b =>
+        (b.category_id === state.activeCategoryId || b.category_id === '*') &&
+        b.section_id === state.activeSectionId
+      )
+      .sort((a,b) => Number(a.order) - Number(b.order));
+
+    if (targetBlocks.length === 0) {
+      area.innerHTML = '<div class="loading-msg">このセクションには表示するコンテンツがありません。</div>';
+      return;
+    }
+
+    const grouped = groupByRowGroup(targetBlocks);
+    for (const group of grouped) {
+      if (group.length === 1) {
+        const wrap = buildBlockWrap(group[0]);
+        if (wrap) area.appendChild(wrap);
+      } else {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'row-group';
+        for (const blk of group) {
+          const wrap = buildBlockWrap(blk);
+          if (wrap) rowDiv.appendChild(wrap);
+        }
+        area.appendChild(rowDiv);
+      }
+    }
+  }
+
+  function groupByRowGroup(blks) {
+    const result = [];
+    const used   = new Set();
+    for (const b of blks) {
+      if (used.has(b.block_id)) continue;
+      if (b.row_group) {
+        const grp = blks.filter(x => x.row_group === b.row_group);
+        grp.forEach(x => used.add(x.block_id));
+        result.push(grp);
+      } else {
+        used.add(b.block_id);
+        result.push([b]);
+      }
+    }
+    return result;
+  }
+
+  function buildBlockWrap(blk) {
+    const inner = buildBlock(blk);
+    if (!inner) return null;
+    const wrap = document.createElement('div');
+    wrap.className = `block-wrap layout-${blk.layout_width || 'full'}`;
+    wrap.dataset.blockId = blk.block_id;
+    wrap.appendChild(inner);
+    return wrap;
+  }
+
+  function buildBlock(blk) {
+    const rows = resolveSource(blk);
+
+    switch (blk.block_type) {
+      case 'notice':        return buildNotice(blk, rows);
+      case 'text':          return buildTextBlock(rows);
+      case 'table':         return buildTableBlock(rows);
+      case 'cards':         return buildCardsBlock(rows);
+      case 'faq_search':    return buildFaqSearch();
+      case 'faq_list':      return buildFaqList(rows);
+      case 'image':         return buildImageBlock(blk, rows);
+      case 'image_gallery': return buildImageGallery(blk, rows);
+      case 'decision_tool': return buildDecisionTool(blk);
+      case 'link_list':     return buildLinkList(rows, blk);
+      default:              return buildTextBlock(rows);
+    }
+  }
+
+  // ── ソース解決 ─────────────────────────────────────────────────
+  function resolveSource(blk) {
+    if (blk.source_type === 'message_key') {
+      const text = getMessage(blk.source_ref);
+      return [{ title: '', body: text, notice_type: blk.style_variant || 'info' }];
+    }
+    if (blk.source_type === 'asset_id') {
+      const a = getAsset(blk.source_ref);
+      return a ? [a] : [];
+    }
+    if (blk.source_type === 'topic_ids') {
+      const ids = String(blk.source_ref || '').split('|').map(s=>s.trim());
+      return contents.filter(c => ids.includes(c.topic_id));
+    }
+    if (blk.source_type === 'content_query') {
+      return queryContent(blk.source_ref);
+    }
+    if (blk.source_type === 'rule_id') {
+      return [];
+    }
+    return [];
+  }
+
+  function queryContent(queryStr) {
+    const params = {};
+    String(queryStr || '').split(';').forEach(p => {
+      const [k, v] = p.split('=');
+      if (k && v !== undefined) params[k.trim()] = v.trim();
+    });
+    return contents
+      .filter(c => {
+        for (const [k, v] of Object.entries(params)) {
+          if (!c[k] && v === 'yes') continue;
+          if (String(c[k] ?? '') !== v) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => Number(a.display_order||0) - Number(b.display_order||0));
+  }
+
+  // ── Block builders ─────────────────────────────────────────────
+  function buildNotice(blk, rows) {
+    const div = document.createElement('div');
+    const noticeType = blk.style_variant || (rows[0]?.notice_type) || 'info';
+    div.className = `notice-block ${noticeType}`;
+    div.innerHTML = nl2br(rows[0]?.body || rows[0]?.text || '');
+    return div;
+  }
+
+  function buildTextBlock(rows) {
+    if (rows.length === 0) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'text-block';
+    for (const r of rows) {
+      if (r.title) {
+        const hdr = document.createElement('div');
+        hdr.className = 'text-block-header';
+        hdr.textContent = r.title;
+        wrap.appendChild(hdr);
+      }
+      const body = document.createElement('div');
+      body.className = 'text-block-body';
+      body.innerHTML = nl2br(r.body || '');
+      wrap.appendChild(body);
+    }
+    return wrap;
+  }
+
+  function buildTableBlock(rows) {
+    if (rows.length === 0) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'table-block' + (rows[0] && rows[0].section_id === 'attachments_list' ? ' attachments-table' : '');
+    const hasDocName = rows.some(r => r.doc_name);
+    const hasSNote   = rows.some(r => r.short_note);
+    const div = document.createElement('div');
+    div.className = 'table-wrap';
+    const table = document.createElement('table');
+    table.className = 'data-table';
+    const thead = document.createElement('thead');
+    const hrow  = document.createElement('tr');
+    const cols = ['書類名','説明'];
+    if (hasSNote) cols.push('備考');
+    cols.forEach(c => {
+      const th = document.createElement('th');
+      th.textContent = c;
+      hrow.appendChild(th);
+    });
+    thead.appendChild(hrow);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      [
+        r.doc_name || r.title || '',
+        r.body || '',
+        hasSNote ? (r.short_note || '') : null,
+      ].forEach((v) => {
+        if (v === null) return;
+        const td = document.createElement('td');
+        td.innerHTML = nl2br(v);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    div.appendChild(table);
+    wrap.appendChild(div);
+    return wrap;
+  }
+
+  function buildCardsBlock(rows) {
+    if (rows.length === 0) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'cards-block';
+    for (const r of rows) {
+      const card = document.createElement('div');
+      card.className = 'card-item';
+      const hdr = document.createElement('div');
+      hdr.className = 'card-header';
+      const title = document.createElement('span');
+      title.className = 'card-title';
+      title.textContent = r.title || '';
+      hdr.appendChild(title);
+      if (r.badge_text) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = r.badge_text;
+        hdr.appendChild(badge);
+      }
+      const body = document.createElement('div');
+      body.className = 'card-body';
+      body.innerHTML = nl2br(r.body || '');
+      card.appendChild(hdr);
+      card.appendChild(body);
+      wrap.appendChild(card);
+    }
+    return wrap;
+  }
+
+  function buildFaqList(rows) {
+    const faqs = rows.filter(r => r.content_type === 'faq' || !r.content_type);
+    if (faqs.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'loading-msg';
+      p.textContent = 'FAQはありません。';
+      return p;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'faq-list';
+    for (const r of faqs) {
+      wrap.appendChild(buildFaqItem(r));
+    }
+    return wrap;
+  }
+
+  function buildFaqItem(r, highlight) {
+    const item = document.createElement('div');
+    item.className = 'faq-item';
+    item.dataset.topicId = r.topic_id || '';
+
+    const btn = document.createElement('button');
+    btn.className = 'faq-question';
+    btn.setAttribute('aria-expanded', 'false');
+
+    const qLabel = document.createElement('span');
+    qLabel.className = 'faq-q-label';
+    qLabel.textContent = 'Q';
+
+    const qText = document.createElement('span');
+    qText.className = 'faq-q-text';
+    if (highlight) {
+      qText.innerHTML = highlightText(r.title || '', highlight);
+    } else {
+      qText.textContent = r.title || '';
+    }
+
+    const chev = document.createElement('span');
+    chev.className = 'faq-chevron';
+    chev.textContent = '▼';
+    chev.setAttribute('aria-hidden', 'true');
+
+    btn.appendChild(qLabel);
+    btn.appendChild(qText);
+    btn.appendChild(chev);
+
+    const ans = document.createElement('div');
+    ans.className = 'faq-answer';
+
+    const aLabel = document.createElement('div');
+    aLabel.className = 'faq-a-label';
+    aLabel.textContent = 'A';
+
+    const aText = document.createElement('div');
+    aText.innerHTML = nl2br(r.body || '');
+
+    ans.appendChild(aLabel);
+    ans.appendChild(aText);
+
+    btn.addEventListener('click', () => {
+      const isOpen = btn.classList.contains('open');
+      btn.classList.toggle('open', !isOpen);
+      ans.classList.toggle('open', !isOpen);
+      btn.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    item.appendChild(btn);
+    item.appendChild(ans);
+    return item;
+  }
+
+  function highlightText(text, query) {
+    if (!query) return esc(text);
+    const nText  = normalize(text);
+    const nQuery = normalize(query);
+    if (!nQuery || !nText.includes(nQuery)) return esc(text);
+    const idx = nText.indexOf(nQuery);
+    const before = esc(text.slice(0, idx));
+    const match  = esc(text.slice(idx, idx + nQuery.length));
+    const after  = esc(text.slice(idx + nQuery.length));
+    return `${before}<mark class="highlight">${match}</mark>${after}`;
+  }
+
+  function buildImageBlock(blk, rows) {
+    const asset = rows[0] || getAsset(blk.source_ref);
+    if (!asset) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'image-block';
+    const img = document.createElement('img');
+    img.src = asset.figure_path || '';
+    img.alt = asset.alt || asset.caption || '';
+    img.loading = 'lazy';
+    if (asset.img_width) img.style.width = asset.img_width;
+    wrap.appendChild(img);
+    if (asset.caption) {
+      const cap = document.createElement('div');
+      cap.className = 'image-block-caption';
+      cap.textContent = asset.caption;
+      wrap.appendChild(cap);
+    }
+    return wrap;
+  }
+
+  function buildImageGallery(blk, rows) {
+    if (rows.length === 0) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'row-group';
+    for (const a of rows) {
+      const ib = document.createElement('div');
+      ib.className = 'image-block block-wrap layout-half';
+      const img = document.createElement('img');
+      img.src = a.figure_path || '';
+      img.alt = a.alt || a.caption || '';
+      img.loading = 'lazy';
+      ib.appendChild(img);
+      if (a.caption) {
+        const c = document.createElement('div');
+        c.className = 'image-block-caption';
+        c.textContent = a.caption;
+        ib.appendChild(c);
+      }
+      wrap.appendChild(ib);
+    }
+    return wrap;
+  }
+
+  function buildDecisionTool(blk) {
+    const rule = decisionLogic.find(r => r.rule_id === blk.source_ref && visible(r));
+    if (!rule) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'decision-tool';
+    const label = document.createElement('div');
+    label.className = 'decision-tool-label';
+    label.textContent = rule.label || '判定ツール';
+    wrap.appendChild(label);
+    const row = document.createElement('div');
+    row.className = 'decision-input-row';
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.className = 'decision-input';
+    inp.placeholder = '金額を入力';
+    const btn = document.createElement('button');
+    btn.className = 'btn-judge';
+    btn.textContent = '判定';
+    const result = document.createElement('div');
+    result.className = 'decision-result';
+    btn.addEventListener('click', () => {
+      const v = parseFloat(inp.value);
+      if (isNaN(v)) { result.className = 'decision-result'; return; }
+      const thr = parseFloat(rule.threshold);
+      let ok = false;
+      if (rule.operator === '<=') ok = v <= thr;
+      else if (rule.operator === '<')  ok = v <  thr;
+      else if (rule.operator === '>=') ok = v >= thr;
+      else if (rule.operator === '>')  ok = v >  thr;
+      else if (rule.operator === '==') ok = v === thr;
+      if (ok) {
+        result.className = 'decision-result ok';
+        result.textContent = '✅ ' + getMessage(rule.ok_message_key || 'ok');
+      } else {
+        result.className = 'decision-result ng';
+        result.textContent = '❌ ' + getMessage(rule.ng_message_key || 'ng');
+      }
+    });
+    row.appendChild(inp);
+    row.appendChild(btn);
+    wrap.appendChild(row);
+    wrap.appendChild(result);
+    return wrap;
+  }
+
+  function buildLinkList(rows, blk) {
+    if (rows.length === 0) return null;
+    if (blk && blk.style_variant === 'table') {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-block';
+      const div = document.createElement('div');
+      div.className = 'table-wrap';
+      const table = document.createElement('table');
+      table.className = 'data-table';
+      const thead = document.createElement('thead');
+      const hrow = document.createElement('tr');
+      ['リンク名', '説明', 'ここを押下すると別窓で開きます'].forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        hrow.appendChild(th);
+      });
+      thead.appendChild(hrow);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        const td1 = document.createElement('td');
+        td1.textContent = r.title || '';
+        const td2 = document.createElement('td');
+        td2.textContent = r.short_note || '';
+        const td3 = document.createElement('td');
+        if (r.url) {
+          const a = document.createElement('a');
+          a.href = esc(r.url);
+          a.target = '_blank';
+          a.textContent = '開く';
+          td3.appendChild(a);
+        }
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      div.appendChild(table);
+      wrap.appendChild(div);
+      return wrap;
+    }
+    const ul = document.createElement('ul');
+    ul.style.cssText = 'padding:8px 0;';
+    for (const r of rows) {
+      const li = document.createElement('li');
+      li.style.cssText = 'margin-bottom:6px;';
+      if (r.url) {
+        const a = document.createElement('a');
+        a.href = esc(r.url);
+        a.target = '_blank';
+        a.textContent = r.title || r.label || r.url;
+        li.appendChild(a);
+      } else {
+        li.textContent = r.title || r.label || '';
+      }
+      ul.appendChild(li);
+    }
+    return ul;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  5. FAQ検索
+  // ══════════════════════════════════════════════════════════════
+  function getCheckedCategories(container) {
+    return Array.from(container.querySelectorAll('input[type=checkbox]:checked'))
+                .map(cb => cb.value);
+  }
+
+  function buildFaqSearch() {
+    const wrap = document.createElement('div');
+
+    // 検索UI（固定表示）
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'faq-search-wrapper faq-search-sticky';
+    searchWrap.innerHTML = `
+      <div class="search-input-row">
+        <input type="text" id="faq-search-input" placeholder="キーワードで検索（スペース区切りでAND検索）" value="${esc(state.searchQuery)}" autocomplete="off">
+        <button class="search-clear" id="faq-search-clear">クリア</button>
+      </div>
+      <div class="search-hint">${searchMinChars}文字以上で検索。スペース区切りで複数キーワードのAND検索が可能です。大文字小文字・全半角は区別しません。</div>
+    `;
+    wrap.appendChild(searchWrap);
+
+    // カテゴリチェックボックス
+    const checkWrap = document.createElement('div');
+    checkWrap.className = 'faq-category-filter';
+    const bizCategories = categories.filter(c =>
+      !COMMON_IDS.includes(c.category_id) && !FAQ_IDS.includes(c.category_id)
+    ).sort((a,b) => Number(a.order) - Number(b.order));
+    bizCategories.forEach(cat => {
+      const label = document.createElement('label');
+      label.style.cssText = 'margin-right:12px; font-size:12px; cursor:pointer;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = cat.category_id;
+      cb.style.cssText = 'margin-right:4px;';
+      cb.addEventListener('change', () => {
+        renderFaqResults(resultArea, state.searchQuery, getCheckedCategories(checkWrap));
+      });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(cat.label));
+      checkWrap.appendChild(label);
+    });
+    searchWrap.appendChild(checkWrap);
+
+    // 結果エリア
+    const resultArea = document.createElement('div');
+    resultArea.id = 'faq-result-area';
+    wrap.appendChild(resultArea);
+
+    // イベント
+    const input = searchWrap.querySelector('#faq-search-input');
+    const clearBtn = searchWrap.querySelector('#faq-search-clear');
+
+    input.addEventListener('input', () => {
+      state.searchQuery = input.value;
+      renderFaqResults(resultArea, state.searchQuery, getCheckedCategories(checkWrap));
+    });
+    clearBtn.addEventListener('click', () => {
+      state.searchQuery = '';
+      input.value = '';
+      checkWrap.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+      renderFaqResults(resultArea, '', []);
+    });
+
+    renderFaqResults(resultArea, state.searchQuery, []);
+    return wrap;
+  }
+
+  function renderFaqResults(area, query, checkedCats) {
+    area.innerHTML = '';
+    const allFaqs = contents.filter(c => c.content_type === 'faq' &&
+      (!checkedCats || checkedCats.length === 0 || checkedCats.includes(c.category_id)));
+    const nQuery  = normalize(query);
+
+    let results;
+    if (!nQuery || nQuery.length < searchMinChars) {
+      results = allFaqs;
+    } else {
+      results = allFaqs.filter(c => {
+        const haystack = normalize(
+          [c.title, c.body, c.keywords, c.short_note, c.category_id].join(' ')
+        );
+        const keywords = nQuery.split(/\s+/).filter(k => k.length > 0);
+        return keywords.every(k => haystack.includes(k));
+      });
+    }
+
+    if (results.length === 0) {
+      area.innerHTML = `<div class="no-result">${esc(getMessage('no_result'))}</div>`;
+      return;
+    }
+
+    const ul = document.createElement('div');
+    ul.className = 'faq-list';
+    for (const r of results) {
+      ul.appendChild(buildFaqItem(r, nQuery.length >= searchMinChars ? query : ''));
+    }
+    area.appendChild(ul);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  6. 全開/全閉
+  // ══════════════════════════════════════════════════════════════
+  function expandAll() {
+    document.querySelectorAll('.faq-question').forEach(btn => {
+      btn.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+      btn.nextElementSibling?.classList.add('open');
+    });
+  }
+  function collapseAll() {
+    document.querySelectorAll('.faq-question').forEach(btn => {
+      btn.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+      btn.nextElementSibling?.classList.remove('open');
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  7. メインレンダー
+  // ══════════════════════════════════════════════════════════════
+  function render() {
+    renderSidebar();
+    renderSectionTabs();
+    renderContent();
+  }
+
+  // ── ボタン初期化 ──────────────────────────────────────────────
+  $('btn-expand-all').addEventListener('click', expandAll);
+  $('btn-collapse-all').addEventListener('click', collapseAll);
+
+  // ── 初回描画 ─────────────────────────────────────────────────
+  render();
+
+})();
