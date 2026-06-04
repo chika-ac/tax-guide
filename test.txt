@@ -1,1 +1,50 @@
-a
+Sub Outlook受信メール取得()
+
+    Dim olApp As Outlook.Application
+    Dim olNs As Outlook.Namespace
+    Dim inbox As Outlook.MAPIFolder
+    Dim mail As Object
+    Dim i As Long
+    Dim row As Long
+
+    'Outlookアプリケーションを取得
+    Set olApp = New Outlook.Application
+    Set olNs = olApp.GetNamespace("MAPI")
+
+    '受信トレイを取得
+    Set inbox = olNs.GetDefaultFolder(olFolderInbox)
+
+    row = 2
+
+    '見出し
+    With ThisWorkbook.Worksheets(1)
+        .Cells(1, 1).Value = "受信日時"
+        .Cells(1, 2).Value = "差出人"
+        .Cells(1, 3).Value = "件名"
+        .Cells(1, 4).Value = "本文"
+    End With
+
+    '受信メールを取得
+    For i = 1 To inbox.Items.Count
+
+        Set mail = inbox.Items(i)
+
+        'メールアイテムのみ対象
+        If TypeName(mail) = "MailItem" Then
+
+            With ThisWorkbook.Worksheets(1)
+                .Cells(row, 1).Value = mail.ReceivedTime
+                .Cells(row, 2).Value = mail.SenderName
+                .Cells(row, 3).Value = mail.Subject
+                .Cells(row, 4).Value = mail.Body
+            End With
+
+            row = row + 1
+
+        End If
+
+    Next i
+
+    MsgBox "受信メールの取得が完了しました。"
+
+End Sub
